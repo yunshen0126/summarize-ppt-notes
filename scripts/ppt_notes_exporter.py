@@ -36,7 +36,7 @@ WORD_NS = {
     "pic": "http://schemas.openxmlformats.org/drawingml/2006/picture",
 }
 
-VERSION = "0.7.0"
+VERSION = "0.8.0"
 
 BANNED_FLUFF_PATTERNS = [
     r"放回.*主线.*理解",
@@ -145,6 +145,110 @@ ROLE_LABELS = {
     "practice": "练习",
     "summary": "总结",
     "visual": "图表理解",
+}
+
+SUPERSCRIPT_CHARS = str.maketrans(
+    {
+        "0": "⁰",
+        "1": "¹",
+        "2": "²",
+        "3": "³",
+        "4": "⁴",
+        "5": "⁵",
+        "6": "⁶",
+        "7": "⁷",
+        "8": "⁸",
+        "9": "⁹",
+        "+": "⁺",
+        "-": "⁻",
+        "=": "⁼",
+        "(": "⁽",
+        ")": "⁾",
+        "n": "ⁿ",
+        "i": "ⁱ",
+    }
+)
+
+SUBSCRIPT_CHARS = str.maketrans(
+    {
+        "0": "₀",
+        "1": "₁",
+        "2": "₂",
+        "3": "₃",
+        "4": "₄",
+        "5": "₅",
+        "6": "₆",
+        "7": "₇",
+        "8": "₈",
+        "9": "₉",
+        "+": "₊",
+        "-": "₋",
+        "=": "₌",
+        "(": "₍",
+        ")": "₎",
+        "a": "ₐ",
+        "e": "ₑ",
+        "h": "ₕ",
+        "i": "ᵢ",
+        "j": "ⱼ",
+        "k": "ₖ",
+        "l": "ₗ",
+        "m": "ₘ",
+        "n": "ₙ",
+        "o": "ₒ",
+        "p": "ₚ",
+        "r": "ᵣ",
+        "s": "ₛ",
+        "t": "ₜ",
+        "u": "ᵤ",
+        "v": "ᵥ",
+        "x": "ₓ",
+    }
+)
+
+LATEX_SYMBOLS = {
+    r"\alpha": "α",
+    r"\beta": "β",
+    r"\gamma": "γ",
+    r"\delta": "δ",
+    r"\epsilon": "ε",
+    r"\varepsilon": "ε",
+    r"\theta": "θ",
+    r"\lambda": "λ",
+    r"\mu": "μ",
+    r"\pi": "π",
+    r"\sigma": "σ",
+    r"\tau": "τ",
+    r"\phi": "φ",
+    r"\omega": "ω",
+    r"\Delta": "Δ",
+    r"\Sigma": "Σ",
+    r"\sum": "∑",
+    r"\prod": "∏",
+    r"\int": "∫",
+    r"\infty": "∞",
+    r"\leq": "≤",
+    r"\le": "≤",
+    r"\geq": "≥",
+    r"\ge": "≥",
+    r"\neq": "≠",
+    r"\approx": "≈",
+    r"\cdot": "·",
+    r"\times": "×",
+    r"\div": "÷",
+    r"\pm": "±",
+    r"\rightarrow": "→",
+    r"\to": "→",
+    r"\leftarrow": "←",
+    r"\Rightarrow": "⇒",
+    r"\forall": "∀",
+    r"\exists": "∃",
+    r"\in": "∈",
+    r"\notin": "∉",
+    r"\cup": "∪",
+    r"\cap": "∩",
+    r"\log": "log",
+    r"\ln": "ln",
 }
 
 
@@ -937,6 +1041,124 @@ def w_text(text: Any) -> str:
     return escape(str(text), {'"': "&quot;"})
 
 
+def strip_latex_delimiters(text: str) -> str:
+    text = text.strip()
+    if text.startswith("$$") and text.endswith("$$"):
+        return text[2:-2].strip()
+    if text.startswith("$") and text.endswith("$"):
+        return text[1:-1].strip()
+    if text.startswith(r"\[") and text.endswith(r"\]"):
+        return text[2:-2].strip()
+    if text.startswith(r"\(") and text.endswith(r"\)"):
+        return text[2:-2].strip()
+    return text
+
+
+def parse_latex_group(text: str, start: int) -> Tuple[Optional[str], int]:
+    while start < len(text) and text[start].isspace():
+        start += 1
+    if start >= len(text) or text[start] != "{":
+        return None, start
+    depth = 0
+    for index in range(start, len(text)):
+        char = text[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start + 1 : index], index + 1
+    return None, start
+
+
+def replace_latex_command_groups(text: str, command: str, arity: int, formatter: Any) -> str:
+    position = 0
+    while True:
+        index = text.find(command, position)
+        if index < 0:
+            return text
+        cursor = index + len(command)
+        groups = []
+        ok = True
+        for _ in range(arity):
+            group, cursor = parse_latex_group(text, cursor)
+            if group is None:
+                ok = False
+                break
+            groups.append(group)
+        if not ok:
+            position = index + len(command)
+            continue
+        replacement = formatter(*groups)
+        text = text[:index] + replacement + text[cursor:]
+        position = index + len(replacement)
+
+
+def to_superscript(text: Any) -> str:
+    raw = plain(text)
+    converted = raw.translate(SUPERSCRIPT_CHARS)
+    return converted if converted != raw or len(raw) <= 3 else f"^({raw})"
+
+
+def to_subscript(text: Any) -> str:
+    raw = plain(text)
+    converted = raw.translate(SUBSCRIPT_CHARS)
+    return converted if converted != raw or len(raw) <= 3 else f"_({raw})"
+
+
+def compact_fraction(num: str, den: str) -> str:
+    left = latex_to_readable_formula(num)
+    right = latex_to_readable_formula(den)
+    if re.fullmatch(r"[\wα-ωΑ-Ω₀-₉ᵢⱼ₊₋₌]+", left) and re.fullmatch(r"[\wα-ωΑ-Ω₀-₉ᵢⱼ₊₋₌]+", right):
+        return f"{left}⁄{right}"
+    return f"({left})⁄({right})"
+
+
+def decorated_symbol(kind: str, value: str) -> str:
+    text = latex_to_readable_formula(value).strip()
+    if not text:
+        return ""
+    if kind == "hat":
+        return {"y": "ŷ", "x": "x̂", "p": "p̂", "q": "q̂"}.get(text, text + "\u0302")
+    if kind == "bar":
+        return text + "\u0304"
+    if kind == "tilde":
+        return text + "\u0303"
+    return text
+
+
+def latex_to_readable_formula(value: Any) -> str:
+    text = strip_latex_delimiters(plain(value))
+    if not text:
+        return ""
+    text = text.replace(r"\left", "").replace(r"\right", "")
+    text = text.replace(r"\,", " ").replace(r"\;", " ").replace(r"\!", "")
+    for _ in range(8):
+        updated = replace_latex_command_groups(text, r"\frac", 2, compact_fraction)
+        updated = replace_latex_command_groups(updated, r"\sqrt", 1, lambda body: f"√({latex_to_readable_formula(body)})")
+        updated = replace_latex_command_groups(updated, r"\hat", 1, lambda body: decorated_symbol("hat", body))
+        updated = replace_latex_command_groups(updated, r"\bar", 1, lambda body: decorated_symbol("bar", body))
+        updated = replace_latex_command_groups(updated, r"\tilde", 1, lambda body: decorated_symbol("tilde", body))
+        if updated == text:
+            break
+        text = updated
+    text = re.sub(r"\\hat\s+([A-Za-z])", lambda m: decorated_symbol("hat", m.group(1)), text)
+    text = re.sub(r"\\bar\s+([A-Za-z])", lambda m: decorated_symbol("bar", m.group(1)), text)
+    text = re.sub(r"\\tilde\s+([A-Za-z])", lambda m: decorated_symbol("tilde", m.group(1)), text)
+    for command, replacement in sorted(LATEX_SYMBOLS.items(), key=lambda item: -len(item[0])):
+        text = text.replace(command, replacement)
+    text = re.sub(r"_\{([^{}]+)\}", lambda match: to_subscript(match.group(1)), text)
+    text = re.sub(r"\^\{([^{}]+)\}", lambda match: to_superscript(match.group(1)), text)
+    text = re.sub(r"_([A-Za-z0-9+\-=()])", lambda match: to_subscript(match.group(1)), text)
+    text = re.sub(r"\^([A-Za-z0-9+\-=()])", lambda match: to_superscript(match.group(1)), text)
+    text = text.replace("{", "").replace("}", "")
+    text = re.sub(r"\\([A-Za-z]+)", r"\1", text)
+    text = text.replace("\\", "")
+    text = text.replace(" - ", " − ").replace("-", "−")
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
 class DocxBuilder:
     def __init__(self, title: str) -> None:
         self.title = title
@@ -995,6 +1217,10 @@ class DocxBuilder:
                 run_parts.append("<w:br/>")
             run_parts.append(f'<w:t xml:space="preserve">{w_text(line)}</w:t>')
         self.body.append(f"<w:p>{style_xml}<w:r>{run_props}{''.join(run_parts)}</w:r></w:p>")
+
+    def add_formula_display(self, formula: Any) -> None:
+        readable = latex_to_readable_formula(formula)
+        self.add_paragraph(readable or formula, style="FormulaDisplay")
 
     def add_bullet(self, text: Any, style: str = "ListBullet") -> None:
         self.add_paragraph(f"- {text}", style=style)
@@ -1221,6 +1447,12 @@ def styles_xml() -> str:
     <w:pPr><w:spacing w:after="80"/><w:shd w:val="clear" w:color="auto" w:fill="ECFDF5"/><w:ind w:left="260"/></w:pPr>
     <w:rPr><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="064E3B"/><w:sz w:val="20"/></w:rPr>
   </w:style>
+  <w:style w:type="paragraph" w:styleId="FormulaDisplay">
+    <w:name w:val="Formula Display"/>
+    <w:basedOn w:val="Normal"/>
+    <w:pPr><w:spacing w:before="80" w:after="90"/><w:jc w:val="center"/><w:shd w:val="clear" w:color="auto" w:fill="ECFDF5"/></w:pPr>
+    <w:rPr><w:rFonts w:ascii="Cambria Math" w:eastAsia="Microsoft YaHei" w:hAnsi="Cambria Math"/><w:color w:val="064E3B"/><w:sz w:val="26"/></w:rPr>
+  </w:style>
   <w:style w:type="paragraph" w:styleId="ExamBox">
     <w:name w:val="Exam Box"/>
     <w:basedOn w:val="Normal"/>
@@ -1288,7 +1520,7 @@ def add_formula_notes(doc: DocxBuilder, formulas: Any) -> None:
         doc.add_paragraph("无。", style="FormulaBoxText")
         return
     if isinstance(formulas, str):
-        doc.add_paragraph(formulas, style="FormulaBoxText")
+        doc.add_formula_display(formulas)
         return
     if not isinstance(formulas, list):
         doc.add_paragraph(json.dumps(formulas, ensure_ascii=False), style="FormulaBoxText")
@@ -1299,7 +1531,11 @@ def add_formula_notes(doc: DocxBuilder, formulas: Any) -> None:
             meaning = item.get("meaning", "")
             conditions = item.get("conditions", "")
             example = item.get("example", "")
-            doc.add_bullet(f"公式：{formula}" if formula else "公式：未填写", style="FormulaBoxText")
+            if formula:
+                doc.add_paragraph("公式：", style="FormulaBoxText", bold=True)
+                doc.add_formula_display(formula)
+            else:
+                doc.add_paragraph("公式：未填写", style="FormulaBoxText")
             if meaning:
                 doc.add_paragraph(f"含义：{meaning}", style="FormulaBoxText")
             if conditions:
@@ -1307,7 +1543,7 @@ def add_formula_notes(doc: DocxBuilder, formulas: Any) -> None:
             if example:
                 doc.add_paragraph(f"例题：{example}", style="FormulaBoxText")
         else:
-            doc.add_bullet(item, style="FormulaBoxText")
+            doc.add_formula_display(item)
 
 
 def compact_source_items(items: List[Any], limit: int = 8) -> List[Any]:
@@ -1376,9 +1612,10 @@ def build_docx(extraction: Dict[str, Any], notes: Dict[int, Dict[str, Any]], out
         if formulas or candidates:
             doc.add_paragraph("从 PPT 结构化文本识别到的公式/候选表达式", style="FormulaBox", bold=True)
             for formula in formulas:
-                doc.add_bullet(formula.get("text") or "[OMML formula]", style="FormulaBoxText")
+                formula_text = formula.get("text") or "[OMML formula]"
+                doc.add_formula_display(formula_text)
             for candidate in candidates:
-                doc.add_bullet(candidate, style="FormulaBoxText")
+                doc.add_formula_display(candidate)
 
         add_note_text(doc, "图片/图表说明", note_field(note, "visual_explanation", "image_explanation"), "待补写：说明图片、图表、流程图、架构图等视觉元素。")
         if layout == "audit":
@@ -1597,6 +1834,7 @@ def write_prompt_pack(extraction: Dict[str, Any], output: Path, language: str) -
         "- Explain each slide's purpose, content, complex ideas, visual elements, formulas, and examples.",
         "- Add final-exam fields: exam_focus, key_takeaways, memory_hooks, likely_questions, common_mistakes, prerequisites, difficulty, estimated_review_minutes, and tags.",
         "- likely_questions should include active-recall questions and at least one exam-style question for important formulas or algorithms.",
+        "- Add `practice_questions` when possible: short original or open-source-adapted exercises with answer, solution steps, difficulty, and source/source_url if externally inspired.",
         "- Avoid generic filler. Do not write vague lines such as 'put this slide back into the chapter logic' unless you name the exact concept, formula, or algorithm.",
         "- detailed_explanation must include a reasoning chain: definition -> condition -> why it works -> how to use it -> where students make mistakes.",
         "- For each important formula, explain units/base/log convention and give a concrete numeric mini-example.",
@@ -2078,7 +2316,11 @@ def write_formula_sheet(extraction: Dict[str, Any], notes: Dict[int, Dict[str, A
         lines += [f"## Slide {number}: {note_field(note, 'title') or slide.get('title', '')}", ""]
         for item in formulas:
             if isinstance(item, dict):
-                lines.append(f"- Formula: `{item.get('formula', '未填写')}`")
+                formula = item.get("formula", "未填写")
+                lines.append(f"- Formula: `{formula}`")
+                display = latex_to_readable_formula(formula)
+                if display and display != formula:
+                    lines.append(f"  - Display: `{display}`")
                 if item.get("meaning"):
                     lines.append(f"  - Meaning: {item.get('meaning')}")
                 if item.get("conditions"):
@@ -2129,6 +2371,142 @@ def write_active_recall(extraction: Dict[str, Any], notes: Dict[int, Dict[str, A
             lines.append(f"   - Answer hint: {answer}")
         lines.append("")
     json_path.write_text(json.dumps({"questions": items}, ensure_ascii=False, indent=2), encoding="utf-8")
+    md_path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def practice_question_from_dict(raw: Dict[str, Any], slide_number: int, title: str) -> Dict[str, Any]:
+    question = plain(raw.get("question") or raw.get("prompt") or raw.get("front") or "")
+    answer = plain(raw.get("answer") or raw.get("back") or raw.get("answer_hint") or "")
+    solution = plain(raw.get("solution") or raw.get("explanation") or raw.get("解题思路") or "")
+    source = plain(raw.get("source") or raw.get("source_title") or "")
+    source_url = plain(raw.get("source_url") or raw.get("url") or "")
+    difficulty = plain(raw.get("difficulty") or "基础")
+    if not solution and answer:
+        solution = "先定位题目考查的定义、条件或公式，再逐步代入；最后用答案检查单位、条件和结论是否一致。"
+    return {
+        "slide": slide_number,
+        "title": title,
+        "difficulty": difficulty,
+        "question": question,
+        "answer": answer or "回看本页讲义后，用自己的话写出完整答案。",
+        "solution": solution or "先写出本页核心概念，再说明适用条件，最后给出结论。",
+        "source": source or "PPT 内容原创生成",
+        "source_url": source_url,
+    }
+
+
+def build_slide_practice_questions(slide: Dict[str, Any], note: Dict[str, Any], max_items: int = 3) -> List[Dict[str, Any]]:
+    number = int(slide.get("number", 0) or 0)
+    title = note_field(note, "title") or slide.get("title", f"Slide {number}")
+    items: List[Dict[str, Any]] = []
+    for raw in as_list(note_field(note, "practice_questions", "exercises")):
+        if isinstance(raw, dict):
+            item = practice_question_from_dict(raw, number, title)
+        else:
+            item = {
+                "slide": number,
+                "title": title,
+                "difficulty": "基础",
+                "question": plain(raw),
+                "answer": plain(note_field(note, "what_it_says", "summary")) or "回看本页讲义后回答。",
+                "solution": "先定位题目中的关键词，再回到本页定义、公式或图表结论，最后写出完整推理。",
+                "source": "PPT 内容原创生成",
+                "source_url": "",
+            }
+        if item["question"]:
+            items.append(item)
+    if len(items) >= max_items:
+        return items[:max_items]
+
+    for formula in as_list(note_field(note, "formula_explanations", "formulas")):
+        if not isinstance(formula, dict):
+            continue
+        formula_text = formula.get("formula", "")
+        readable = latex_to_readable_formula(formula_text)
+        question = f"解释并套用公式 {readable or formula_text}：每个变量代表什么？这个公式适用在什么条件下？"
+        if formula.get("example"):
+            question += f" 仿照例题完成一次计算或判断：{plain(formula.get('example'))}"
+        items.append(
+            {
+                "slide": number,
+                "title": title,
+                "difficulty": slide_difficulty_label(note, slide),
+                "question": question,
+                "answer": plain(formula.get("meaning")) or "写出变量含义、公式目标和结果解释。",
+                "solution": plain(formula.get("conditions")) or "先确认公式条件，再代入变量，最后解释结果含义。",
+                "source": "PPT 公式原创改编",
+                "source_url": "",
+            }
+        )
+        if len(items) >= max_items:
+            return items[:max_items]
+
+    for raw_question in as_list(note_field(note, "likely_questions")):
+        if isinstance(raw_question, dict):
+            question = plain(raw_question.get("question") or raw_question.get("front") or "")
+            answer = plain(raw_question.get("answer") or raw_question.get("back") or "")
+        else:
+            question = plain(raw_question)
+            answer = ""
+        if not question:
+            continue
+        items.append(
+            {
+                "slide": number,
+                "title": title,
+                "difficulty": slide_difficulty_label(note, slide),
+                "question": question,
+                "answer": answer or plain(note_field(note, "what_it_says", "summary")) or "回看本页讲义后回答。",
+                "solution": "先判断题目考查的是概念、公式、图表还是常见错误；再按本页讲义中的条件和步骤作答。",
+                "source": "PPT 考点原创改编",
+                "source_url": "",
+            }
+        )
+        if len(items) >= max_items:
+            return items[:max_items]
+
+    fallback_question = f"第 {number} 页 `{title}` 的核心考点是什么？请写出一个容易错的地方。"
+    items.append(
+        {
+            "slide": number,
+            "title": title,
+            "difficulty": slide_difficulty_label(note, slide),
+            "question": fallback_question,
+            "answer": plain(note_field(note, "key_takeaways")) or plain(note_field(note, "exam_focus")) or "写出本页核心结论。",
+            "solution": "先用一句话说出本页解决的问题，再列出关键词、条件和常见错误。",
+            "source": "PPT 内容原创生成",
+            "source_url": "",
+        }
+    )
+    return items[:max_items]
+
+
+def write_practice_questions(extraction: Dict[str, Any], notes: Dict[int, Dict[str, Any]], md_path: Path, json_path: Path) -> None:
+    items: List[Dict[str, Any]] = []
+    for slide in extraction.get("slides", []):
+        number = int(slide.get("number", 0) or 0)
+        items.extend(build_slide_practice_questions(slide, notes.get(number, {}), max_items=2))
+    lines = [
+        "# 小题练习",
+        "",
+        "这些题目用于把 PPT 内容变成可做的基础练习。默认题目为根据课件原创生成或改编；如果人工/联网补充题源，必须保留来源链接并避免整段复制题库内容。",
+        "",
+    ]
+    for index, item in enumerate(items, start=1):
+        lines += [
+            f"## {index}. Slide {item['slide']}: {item['title']}",
+            "",
+            f"- 难度: {item['difficulty']}",
+            f"- 来源: {item['source']}{' - ' + item['source_url'] if item.get('source_url') else ''}",
+            "",
+            f"**题目:** {item['question']}",
+            "",
+            f"**答案:** {item['answer']}",
+            "",
+            f"**解题思路:** {item['solution']}",
+            "",
+        ]
+    json_path.write_text(json.dumps({"practice_questions": items}, ensure_ascii=False, indent=2), encoding="utf-8")
     md_path.write_text("\n".join(lines), encoding="utf-8")
 
 
@@ -2185,9 +2563,10 @@ def write_cram_plan(
         "",
         "1. 先看 `learning_path.md`，按模块确定今天学哪几页。",
         "2. 用 `active_recall_questions.md` 闭卷回答，答不出就回看对应页。",
-        "3. 复习 `formula_sheet.md`，每个公式至少手算一个例子。",
-        "4. 用 `mistake_log_template.md` 记录错因，而不是只记录答案。",
-        "5. 睡前用 `flashcards_anki.csv` 或 `flashcards.md` 快速回忆。",
+        "3. 做 `practice_questions.md`，先自己写，再看答案和解题思路。",
+        "4. 复习 `formula_sheet.md`，每个公式至少手算一个例子。",
+        "5. 用 `mistake_log_template.md` 记录错因，而不是只记录答案。",
+        "6. 睡前用 `flashcards_anki.csv` 或 `flashcards.md` 快速回忆。",
         "",
     ]
     if days is None or days >= 7:
@@ -2314,6 +2693,7 @@ def write_study_dashboard(extraction: Dict[str, Any], notes: Dict[int, Dict[str,
         f"- [{(study_dir / 'exam_cram_plan.md').name}](exam_cram_plan.md)",
         f"- [{(study_dir / 'one_page_review.md').name}](one_page_review.md)",
         f"- [{(study_dir / 'active_recall_questions.md').name}](active_recall_questions.md)",
+        f"- [{(study_dir / 'practice_questions.md').name}](practice_questions.md)",
         f"- [{(study_dir / 'formula_sheet.md').name}](formula_sheet.md)",
         f"- [{(study_dir / 'flashcards_anki.csv').name}](flashcards_anki.csv)",
         f"- [{(study_dir / 'flashcards.md').name}](flashcards.md)",
@@ -2325,9 +2705,10 @@ def write_study_dashboard(extraction: Dict[str, Any], notes: Dict[int, Dict[str,
         "1. Start with `learning_path.md` to follow the chapter-style order.",
         "2. Read the handout pages for the current module only.",
         "3. Answer active recall questions without opening the slides.",
-        "4. Import `flashcards_anki.csv` into Anki or review `flashcards.md` manually.",
-        "5. Rework every formula from `formula_sheet.md` with a small example.",
-        "6. Put every wrong answer into the mistake log and revisit it the next day.",
+        "4. Do `practice_questions.md`, then read the answer and solution steps.",
+        "5. Import `flashcards_anki.csv` into Anki or review `flashcards.md` manually.",
+        "6. Rework every formula from `formula_sheet.md` with a small example.",
+        "7. Put every wrong answer into the mistake log and revisit it the next day.",
     ]
     output.write_text("\n".join(lines), encoding="utf-8")
 
@@ -2347,6 +2728,7 @@ def write_study_pack(
     write_one_page_review(extraction, notes, study_dir / "one_page_review.md")
     write_formula_sheet(extraction, notes, study_dir / "formula_sheet.md")
     write_active_recall(extraction, notes, study_dir / "active_recall_questions.md", study_dir / "active_recall_questions.json")
+    write_practice_questions(extraction, notes, study_dir / "practice_questions.md", study_dir / "practice_questions.json")
     write_flashcards(extraction, notes, study_dir / "flashcards_anki.csv", study_dir / "flashcards.md")
     write_mistake_log(study_dir / "mistake_log_template.md")
     write_concept_map(extraction, notes, study_dir / "concept_map.mmd")
@@ -2396,6 +2778,7 @@ def write_start_here(
             ("recall", "active_recall_questions.md", "04_主动回忆题.md"),
             ("formula", "formula_sheet.md", "05_公式速查.md"),
             ("mistakes", "mistake_log_template.md", "06_错题本模板.md"),
+            ("practice", "practice_questions.md", "07_小题练习.md"),
             ("anki", "flashcards_anki.csv", "可选_Anki卡片.csv"),
             ("plan", "exam_cram_plan.md", "可选_冲刺计划.md"),
         ]
@@ -2429,14 +2812,15 @@ def write_start_here(
             "",
         ]
     lines += [
-        "## 先看这 4 个",
+        "## 先看这 5 个",
         "",
     ]
     priority = [
         ("1. 学习路径", "path", "按老师讲课顺序看，知道每一章先学什么、为什么学、学到什么程度。"),
         ("2. 复习讲义", "handout", "按学习路径指定的页面阅读，包含截图、考点、深度讲解、公式例题和常见错误。"),
         ("3. 主动回忆题", "recall", "闭卷答题。答不出来再回看讲义。"),
-        ("4. 公式速查", "formula", "只复习公式、变量、条件和例题。"),
+        ("4. 小题练习", "practice", "做基础题，再看答案和解题思路。"),
+        ("5. 公式速查", "formula", "只复习公式、变量、条件和例题。"),
     ]
     for title, key, desc in priority:
         if key in files:
@@ -2472,8 +2856,9 @@ def write_start_here(
         "1. 读 `00_学习路径.md`，按模块决定今天看哪些页。",
         "2. 打开 `01_复习讲义.docx`，只读当前模块对应页面。",
         "3. 合上讲义，做 `04_主动回忆题.md`。",
-        "4. 错题写入 `06_错题本模板.md`。",
-        "5. 考前只看 `03_一页纸总览.md`、`05_公式速查.md` 和错题本。",
+        "4. 做 `07_小题练习.md`，先写答案，再看解题思路。",
+        "5. 错题写入 `06_错题本模板.md`。",
+        "6. 考前只看 `03_一页纸总览.md`、`05_公式速查.md` 和错题本。",
         "",
     ]
     start = deliverables_dir / "START_HERE.md"

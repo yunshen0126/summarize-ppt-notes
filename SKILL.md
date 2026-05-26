@@ -1,13 +1,13 @@
 ---
 name: summarize-ppt-notes
-description: Create detailed Word/Markdown study notes and final-exam review packs from PowerPoint decks or slide PDFs, including full-slide screenshots, extracted text, formulas, tables, images, charts, per-slide explanations, teacher-style chapter learning paths, active-recall questions, formula sheets, Anki flashcards, mistake-log templates, cram plans, and concept maps. Use when asked to summarize PPT/PPTX/PDF courseware, lecture slides, presentation notes, formulas, diagrams, or generate Chinese期末复习 materials that explain what each slide is for, what it says, complex content, what to learn first, likely exam questions, common mistakes, and worked examples for complex formulas.
+description: Create detailed Word/Markdown study notes and final-exam review packs from PowerPoint decks or slide PDFs, including full-slide screenshots, extracted text, cleaner Word formula display, formulas, tables, images, charts, per-slide explanations, teacher-style chapter learning paths, active-recall questions, small practice exercises with answers/solution steps, formula sheets, Anki flashcards, mistake-log templates, cram plans, and concept maps. Use when asked to summarize PPT/PPTX/PDF courseware, lecture slides, presentation notes, formulas, diagrams, or generate Chinese期末复习 materials that explain what each slide is for, what it says, complex content, what to learn first, likely exam questions, common mistakes, and worked examples for complex formulas.
 ---
 
 # Summarize PPT Notes
 
 ## Overview
 
-Use this skill to turn a slide deck (`.pptx`, `.ppt`, or slide `.pdf`) into a Word/Markdown study-notes document and a final-exam review pack. The expected output is not a brief summary and not generic filler: produce page-by-page notes with the original slide screenshot, complete extracted content, image/chart descriptions, formula recognition, teaching-style explanations, a chapter-style learning path, likely exam questions, common mistakes, memory hooks, and active-recall materials.
+Use this skill to turn a slide deck (`.pptx`, `.ppt`, or slide `.pdf`) into a Word/Markdown study-notes document and a final-exam review pack. The expected output is not a brief summary and not generic filler: produce page-by-page notes with the original slide screenshot, complete extracted content, image/chart descriptions, cleaner Word formula display, formula recognition, teaching-style explanations, a chapter-style learning path, likely exam questions, small practice exercises, common mistakes, memory hooks, and active-recall materials.
 
 Chinese is the default output language unless the user asks otherwise.
 
@@ -32,6 +32,7 @@ Chinese is the default output language unless the user asks otherwise.
    - `exam_focus`: how this slide may appear in a final exam.
    - `key_takeaways`: the points the student must be able to recall without notes.
    - `likely_questions`: active-recall and exam-style questions with answer hints.
+   - `practice_questions`: short exercises with answer, solution steps, difficulty, and source/source_url when adapted from open web material.
    - `common_mistakes`: traps, confusing pairs, missing conditions, and calculation pitfalls.
    - `memory_hooks`: concise memory aids, contrast rules, or step patterns.
 6. Re-run the script with the filled notes JSON to build the final Word document. Use the default teacher profile so the user sees one clean `START_HERE.md` entry instead of many intermediate files:
@@ -40,7 +41,7 @@ Chinese is the default output language unless the user asks otherwise.
    python3 /path/to/summarize-ppt-notes/scripts/ppt_notes_exporter.py "/path/to/slides.pptx" --notes-json "/path/to/notes_filled.json" --output "/path/to/PPT学习笔记.docx" --notes-markdown "/path/to/PPT学习笔记.md" --study-mode final --layout study --output-profile teacher --fail-under 85
    ```
 
-7. Verify the final `*_deliverables/START_HERE.md` and `00_学习路径.md` exist. The final answer should point the user to START_HERE first, then mention debug/work directories only as optional. Check that slide count, screenshots, formulas, chart/diagram objects, extracted images, teacher-style learning path, active-recall questions, formula sheet, flashcards, concept map, and mistake-log template are represented. If any formula or visual element cannot be read confidently, mark it clearly as `需核对` and explain what is uncertain.
+7. Verify the final `*_deliverables/START_HERE.md`, `00_学习路径.md`, and `07_小题练习.md` exist. The final answer should point the user to START_HERE first, then mention debug/work directories only as optional. Check that slide count, screenshots, formulas, chart/diagram objects, extracted images, teacher-style learning path, active-recall questions, practice questions with answers/solution steps, formula sheet, flashcards, concept map, and mistake-log template are represented. If any formula or visual element cannot be read confidently, mark it clearly as `需核对` and explain what is uncertain.
 
 ## Slide Analysis Standard
 
@@ -54,6 +55,7 @@ For each slide, cover the following:
 - **公式说明和例题**: list formulas, define variables, state conditions, explain intuition, then give a small numeric or conceptual example when the formula is nontrivial.
 - **期末复习字段**: identify likely exam forms, key takeaways, common mistakes, active-recall questions, memory hooks, and estimated review time.
 - **学习路径字段**: use titles, tags, prerequisites, difficulty, formulas, visuals, examples, and exam focus to infer chapter-like modules, must-read pages, and self-test checkpoints.
+- **小题练习字段**: create short exercises that can be solved quickly, with answer and solution steps. Prefer original questions generated from the PPT; if matching online examples, use open/clearly attributable sources, paraphrase or adapt instead of copying, and include `source_url`.
 
 ## Writing Quality Standard
 
@@ -82,7 +84,7 @@ For diagrams, name nodes, arrows, axes, regions, or table columns. Do not write 
 ## Formula Handling
 
 - Treat formulas in three sources as important: Office Math/OMML extracted from `.pptx`, formula-like text detected by regex, and formulas visible only in screenshots or images.
-- Convert formulas to LaTeX when possible. Keep the original visible form if conversion is uncertain.
+- Keep formulas in LaTeX in JSON/Markdown when useful, but the Word output should show a readable display form instead of making raw LaTeX the primary view.
 - Explain each variable and symbol. Do not skip constants, subscripts, superscripts, summations, integrals, matrix dimensions, or probability conditions.
 - For a complex formula, include at least one worked example. A worked example can be numeric, symbolic, or a small scenario, but it must show how the formula is used.
 - If formula recognition is uncertain, write `需核对` beside the formula and describe the ambiguity.
@@ -100,6 +102,7 @@ Before finalizing:
 
 - There is a clean student-facing `START_HERE.md` that says what to read first, what is optional, and what is only for debugging.
 - `00_学习路径.md` exists and tells the learner the chapter-style order, must-read slides, goals, checkpoints, and common traps.
+- `07_小题练习.md` exists and contains question, answer, solution steps, difficulty, and source notes.
 - Slide count in the Word document matches the deck or PDF page count.
 - Every slide has a screenshot or a documented reason why rendering failed.
 - No obvious formula, chart, table, or image is ignored.
@@ -108,7 +111,7 @@ Before finalizing:
 - Complex formulas include examples.
 - `quality_report.md` has no missing required fields for the intended delivery level.
 - In `--study-mode final`, every slide has exam focus, key takeaways, likely questions, and common mistakes.
-- `study_pack/` includes a usable learning path, cram plan, formula sheet, active-recall set, flashcards, mistake log, one-page review, and concept map.
+- `study_pack/` includes a usable learning path, cram plan, formula sheet, active-recall set, practice questions, flashcards, mistake log, one-page review, and concept map.
 - The final answer to the user gives the Word document path and mentions any limitations or uncertain recognitions.
 
 ## Resources

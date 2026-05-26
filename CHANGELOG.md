@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.0
+
+- Improve Word formula display so common LaTeX appears as readable formula text instead of raw source code.
+- Add `practice_questions.md` and `practice_questions.json` with short exercises, answers, solution steps, difficulty, and source notes.
+- Surface `07_小题练习.md` in clean deliverables and update START_HERE to include the practice loop.
+
 ## 0.7.0
 
 - Add `learning_path.md`, a teacher-style chapter route with module goals, must-read slides, self-test checkpoints, and common traps.

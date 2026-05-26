@@ -22,8 +22,8 @@ Most PPT summarizers stop at short bullet summaries. This project targets seriou
 - Extracts PowerPoint XML text, speaker notes, tables, images, chart/diagram relationships, and formula-like expressions
 - Generates `extraction.json`, `notes_template.json`, `extraction.md`, `quality_report.json`, and `quality_report.md`
 - Generates final notes as Markdown plus an LLM/VLM prompt pack for review workflows
-- Generates a final-exam study pack: teacher-style learning path, cram plan, active-recall questions, formula sheet, Anki CSV, mistake-log template, one-page review, and Mermaid concept map
-- Builds a Word `.docx` with slide screenshots and structured notes
+- Generates a final-exam study pack: teacher-style learning path, cram plan, active-recall questions, small practice questions with answers/solutions, formula sheet, Anki CSV, mistake-log template, one-page review, and Mermaid concept map
+- Builds a Word `.docx` with slide screenshots, structured notes, and cleaner formula display instead of raw LaTeX as the main formula view
 - Can run as a Codex Skill or as a standalone CLI
 - Works offline for extraction; no source files are uploaded by the scripts
 
@@ -122,6 +122,7 @@ The default teacher profile creates a clean `*_deliverables/` folder. Open this 
 ├── 04_主动回忆题.md
 ├── 05_公式速查.md
 ├── 06_错题本模板.md
+├── 07_小题练习.md
 └── 可选_Anki卡片.csv
 ```
 
@@ -136,6 +137,7 @@ The generated `study_pack/` folder is designed for students who need to convert 
 - `exam_cram_plan.md`: day-by-day review plan
 - `one_page_review.md`: high-yield summary
 - `active_recall_questions.md` and `.json`: closed-book self-test questions
+- `practice_questions.md` and `.json`: short exercises with answers, solution steps, difficulty, and source notes
 - `formula_sheet.md`: formulas, meanings, conditions, and examples
 - `flashcards_anki.csv`: importable flashcards
 - `flashcards.md`: readable flashcards
@@ -204,7 +206,7 @@ The included scripts process files locally. They do not call external APIs. If y
 ## Roadmap
 
 - OCR plugin hook for formulas embedded only in screenshots
-- OMML-to-LaTeX conversion for Office Math objects
+- richer LaTeX/OMML-to-Word equation rendering
 - branded Word templates
 - PowerPoint comment export
 - richer chart data extraction

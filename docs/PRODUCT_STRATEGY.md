@@ -56,6 +56,7 @@ Recommended public repo structure:
 - Skill-native: Codex can use the same repository as both documentation and automation.
 - Markdown-native review: final notes and prompt packs can be reviewed directly on GitHub.
 - Teacher-like guidance: the output starts with a chapter-style learning path so students know what to study first and when to move on.
+- Practice loop: students get short exercises with answer and solution steps instead of only reading notes.
 - Final-exam loop: the output includes active recall, flashcards, formula sheets, a mistake log, and a cram plan.
 
 ## Pricing Hypothesis
@@ -78,7 +79,8 @@ Recommended public repo structure:
 1. Add real OMML-to-LaTeX conversion.
 2. Add optional OCR adapter interface.
 3. Add `.dotx` or template-based Word styling.
-4. Add adaptive diagnostics that change the learning path from a student's wrong answers.
-5. Add benchmark decks with expected extraction snapshots.
-6. Add a small local review UI for filling `notes_template.json`.
-7. Add LMS export and Anki package (`.apkg`) generation.
+4. Add optional open-education web matching for practice questions with source attribution.
+5. Add adaptive diagnostics that change the learning path from a student's wrong answers.
+6. Add benchmark decks with expected extraction snapshots.
+7. Add a small local review UI for filling `notes_template.json`.
+8. Add LMS export and Anki package (`.apkg`) generation.

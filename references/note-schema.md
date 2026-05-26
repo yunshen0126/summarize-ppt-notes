@@ -37,6 +37,16 @@ Create a JSON file with this structure, then pass it to `ppt_notes_exporter.py` 
           "answer": "标准答案或答题要点。"
         }
       ],
+      "practice_questions": [
+        {
+          "question": "基础小题，最好能直接动笔做。",
+          "answer": "最终答案。",
+          "solution": "分步骤解题思路。",
+          "difficulty": "基础 / 中等 / 困难",
+          "source": "PPT 内容原创生成 / 开放来源改编",
+          "source_url": "如果参考了网上开放资料，填写链接；原创题留空。"
+        }
+      ],
       "common_mistakes": [
         "学生容易犯的错误、混淆点、漏写条件、计算陷阱。"
       ],
@@ -69,6 +79,7 @@ Guidelines:
 - If the extraction reports images, tables, charts, diagrams, or embedded objects, fill `visual_explanation`.
 - For final-exam use, fill `exam_focus`, `key_takeaways`, `likely_questions`, and `common_mistakes` for every slide.
 - `likely_questions` should include active-recall questions. For formulas, include at least one calculation or application question.
+- `practice_questions` should be short enough for students to solve quickly and must include answer plus solution steps. Prefer original questions generated from the slide. If using online material, use open/clearly attributable sources, paraphrase or adapt, and keep `source_url`.
 - `memory_hooks` should be short and useful, not decorative. Prefer contrast tables, acronyms, or "first do X, then do Y" patterns.
 - Do not use generic filler such as “放回主线理解”, “先明确解决的问题”, “建议仔细理解”, or “复习时按三步走”.
 - `detailed_explanation` should be high-density: define the concept, state conditions, explain why it works, show how to use it, and name the common mistake.

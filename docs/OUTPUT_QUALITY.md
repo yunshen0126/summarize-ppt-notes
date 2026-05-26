@@ -12,6 +12,7 @@ Good notes are:
 - compact: they remove generic transitions and empty advice
 - exam-aware: they name likely question types and common mistakes
 - guided: they tell students which module to study first, which slides are must-read, and when they are ready to move on
+- actionable: they include short practice questions with answers and solution steps
 
 ## Bad Notes
 
@@ -56,3 +57,11 @@ For a learning path:
 3. Give closed-book checkpoints.
 4. State common traps.
 5. Avoid duplicating the full notes.
+
+For practice questions:
+
+1. Keep each question short enough to solve in a few minutes.
+2. Include final answer and solution steps.
+3. Tie the question to a slide concept, formula, diagram, or common mistake.
+4. Prefer original questions generated from the PPT.
+5. If using web material, only use open or clearly attributable sources, paraphrase/adapt the question, and keep the source link.

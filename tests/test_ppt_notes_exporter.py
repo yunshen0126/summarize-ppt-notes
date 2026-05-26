@@ -135,6 +135,16 @@ class PptNotesExporterTest(unittest.TestCase):
                                 "answer": "逐项计算误差平方，再除以样本数。"
                             }
                         ],
+                        "practice_questions": [
+                            {
+                                "question": "真实值为 3、5，预测值为 2、7，计算 MSE。",
+                                "answer": "2.5",
+                                "solution": "误差分别为 1 和 -2，平方后为 1 和 4，平均得到 2.5。",
+                                "difficulty": "基础",
+                                "source": "PPT 内容原创生成",
+                                "source_url": ""
+                            }
+                        ],
                         "common_mistakes": ["忘记除以样本数。"],
                         "prerequisites": ["平均值", "平方"],
                         "difficulty": "基础",
@@ -172,11 +182,16 @@ class PptNotesExporterTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
             self.assertTrue(output.exists())
             self.assertTrue(zipfile.is_zipfile(output))
+            with zipfile.ZipFile(output) as docx:
+                document_xml = docx.read("word/document.xml").decode("utf-8")
+            self.assertIn("1⁄n", document_xml)
+            self.assertNotIn("\\frac", document_xml)
             self.assertTrue((workdir / "final_notes.md").exists())
             self.assertTrue((workdir / "prompt_pack.md").exists())
             self.assertTrue((workdir / "study_pack" / "flashcards_anki.csv").exists())
             self.assertTrue((workdir / "study_pack" / "learning_path.md").exists())
             self.assertTrue((workdir / "study_pack" / "active_recall_questions.md").exists())
+            self.assertTrue((workdir / "study_pack" / "practice_questions.md").exists())
             self.assertTrue((workdir / "study_pack" / "formula_sheet.md").exists())
             self.assertTrue((workdir / "study_pack" / "mistake_log_template.md").exists())
             deliverables = output.with_suffix("").with_name(output.stem + "_deliverables")
@@ -184,8 +199,10 @@ class PptNotesExporterTest(unittest.TestCase):
             self.assertTrue((deliverables / "00_学习路径.md").exists())
             self.assertTrue((deliverables / "01_复习讲义.docx").exists())
             self.assertTrue((deliverables / "04_主动回忆题.md").exists())
+            self.assertTrue((deliverables / "07_小题练习.md").exists())
             start_here = (deliverables / "START_HERE.md").read_text(encoding="utf-8")
             self.assertIn("00_学习路径.md", start_here)
+            self.assertIn("07_小题练习.md", start_here)
             report = json.loads((workdir / "quality_report.json").read_text(encoding="utf-8"))
             self.assertTrue(report["passed"])
             self.assertGreaterEqual(report["score"], 90)

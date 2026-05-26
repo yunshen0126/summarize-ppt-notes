@@ -39,10 +39,11 @@ Recommended order:
 1. Read `learning_path.md` to follow the chapter-style route instead of treating every slide equally.
 2. Open the Word handout only for the current learning-path module.
 3. Answer `active_recall_questions.md` without opening the slides.
-4. Rework formulas from `formula_sheet.md`.
-5. Import `flashcards_anki.csv` into Anki or use `flashcards.md`.
-6. Record every missed question in `mistake_log_template.md`.
-7. Revisit the mistake log before reviewing the original PPT again.
+4. Do `practice_questions.md` before reading the answers and solution steps.
+5. Rework formulas from `formula_sheet.md`.
+6. Import `flashcards_anki.csv` into Anki or use `flashcards.md`.
+7. Record every missed question in `mistake_log_template.md`.
+8. Revisit the mistake log before reviewing the original PPT again.
 
 ## 5. Three-Pass Review
 

@@ -1,4 +1,4 @@
 interface:
   display_name: "PPT Notes Summarizer"
   short_description: "Turn slide decks into guided study notes"
-  default_prompt: "Use $summarize-ppt-notes to turn this PPT into a Word study-notes document with a teacher-style learning path, slide screenshots, extracted content, formula explanations, and examples."
+  default_prompt: "Use $summarize-ppt-notes to turn this PPT into a Word study-notes document with a teacher-style learning path, cleaner formula display, slide screenshots, extracted content, formula explanations, and practice questions with answers."
