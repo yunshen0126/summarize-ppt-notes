@@ -40,10 +40,11 @@ Recommended order:
 2. Open the Word handout only for the current learning-path module.
 3. Answer `active_recall_questions.md` without opening the slides.
 4. Do `practice_questions.md` before reading the answers and solution steps.
-5. Rework formulas from `formula_sheet.md`.
-6. Import `flashcards_anki.csv` into Anki or use `flashcards.md`.
-7. Record every missed question in `mistake_log_template.md`.
-8. Revisit the mistake log before reviewing the original PPT again.
+5. Open `study_index.html` when a browser-based review surface is easier than reading separate Markdown files.
+6. Rework formulas from `formula_sheet.md`.
+7. Import `flashcards_anki.csv` into Anki or use `flashcards.md`.
+8. Record every missed question in `mistake_log_template.md` or `wrong_answer_template.json`.
+9. Regenerate with `--wrong-answers-json` and review `adaptive_review.md`.
 
 ## 5. Three-Pass Review
 

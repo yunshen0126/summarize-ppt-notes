@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+from html import escape as html_escape
 import io
 import json
 import mimetypes
@@ -34,9 +35,10 @@ WORD_NS = {
     "wp": "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing",
     "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
     "pic": "http://schemas.openxmlformats.org/drawingml/2006/picture",
+    "m": NS_M,
 }
 
-VERSION = "0.8.0"
+VERSION = "0.9.0"
 
 BANNED_FLUFF_PATTERNS = [
     r"放回.*主线.*理解",
@@ -812,6 +814,35 @@ def filter_extraction_slides(extraction: Dict[str, Any], selector: Optional[str]
     extraction["slide_count"] = len(slides)
 
 
+def apply_ocr_json(extraction: Dict[str, Any], ocr_path: Optional[Path]) -> None:
+    if not ocr_path:
+        return
+    raw = json.loads(ocr_path.read_text(encoding="utf-8"))
+    items = raw if isinstance(raw, list) else raw.get("slides", [])
+    by_number = {int(slide.get("number", 0) or 0): slide for slide in extraction.get("slides", [])}
+    merged = 0
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        try:
+            number = int(item.get("number") or item.get("slide") or item.get("page"))
+        except Exception:
+            continue
+        slide = by_number.get(number)
+        if not slide:
+            continue
+        for key in ("text", "formula_candidates", "alt_texts"):
+            values = as_list(item.get(key))
+            if values:
+                slide[key] = unique_preserve(list(slide.get(key) or []) + [plain(value) for value in values if plain(value)])
+        if item.get("formulas"):
+            slide["formulas"] = list(slide.get("formulas") or []) + as_list(item.get("formulas"))
+        if item.get("visual_explanation"):
+            slide.setdefault("ocr_visual_explanations", []).append(plain(item.get("visual_explanation")))
+        merged += 1
+    extraction.setdefault("warnings", []).append(f"Merged OCR/math-recognition JSON from {ocr_path} for {merged} slide(s).")
+
+
 def make_notes_template(extraction: Dict[str, Any], language: str) -> Dict[str, Any]:
     slides = []
     for slide in extraction.get("slides", []):
@@ -830,6 +861,7 @@ def make_notes_template(extraction: Dict[str, Any], language: str) -> Dict[str, 
                 "key_takeaways": [],
                 "memory_hooks": [],
                 "likely_questions": [],
+                "practice_questions": [],
                 "common_mistakes": [],
                 "prerequisites": [],
                 "difficulty": "",
@@ -1159,6 +1191,126 @@ def latex_to_readable_formula(value: Any) -> str:
     return text
 
 
+def omml_run(text: Any) -> str:
+    return f"<m:r><m:t>{w_text(text)}</m:t></m:r>"
+
+
+def omml_group(xml: str) -> str:
+    return f"<m:e>{xml or omml_run('□')}</m:e>"
+
+
+def parse_latex_script(text: str, start: int) -> Tuple[str, int]:
+    while start < len(text) and text[start].isspace():
+        start += 1
+    if start >= len(text):
+        return "", start
+    if text[start] == "{":
+        group, end = parse_latex_group(text, start)
+        if group is None:
+            return "", start
+        return latex_to_omml_inner(group), end
+    if text[start] == "\\":
+        match = re.match(r"\\[A-Za-z]+", text[start:])
+        if match:
+            raw = match.group(0)
+            return latex_to_omml_inner(raw), start + len(raw)
+    return latex_to_omml_inner(text[start]), start + 1
+
+
+def omml_apply_scripts(base_xml: str, sub_xml: str, sup_xml: str) -> str:
+    if sub_xml and sup_xml:
+        return f"<m:sSubSup>{omml_group(base_xml)}<m:sub>{sub_xml}</m:sub><m:sup>{sup_xml}</m:sup></m:sSubSup>"
+    if sub_xml:
+        return f"<m:sSub>{omml_group(base_xml)}<m:sub>{sub_xml}</m:sub></m:sSub>"
+    if sup_xml:
+        return f"<m:sSup>{omml_group(base_xml)}<m:sup>{sup_xml}</m:sup></m:sSup>"
+    return base_xml
+
+
+def parse_latex_atom_to_omml(text: str, start: int) -> Tuple[str, int]:
+    if text.startswith(r"\frac", start):
+        cursor = start + len(r"\frac")
+        numerator, cursor = parse_latex_group(text, cursor)
+        denominator, cursor = parse_latex_group(text, cursor)
+        if numerator is not None and denominator is not None:
+            return (
+                f"<m:f><m:num>{latex_to_omml_inner(numerator)}</m:num><m:den>{latex_to_omml_inner(denominator)}</m:den></m:f>",
+                cursor,
+            )
+    if text.startswith(r"\sqrt", start):
+        cursor = start + len(r"\sqrt")
+        body, cursor = parse_latex_group(text, cursor)
+        if body is not None:
+            return f"<m:rad><m:radPr><m:degHide m:val=\"1\"/></m:radPr>{omml_group(latex_to_omml_inner(body))}</m:rad>", cursor
+    for command, kind in [(r"\hat", "hat"), (r"\bar", "bar"), (r"\tilde", "tilde")]:
+        if text.startswith(command, start):
+            cursor = start + len(command)
+            body, cursor = parse_latex_group(text, cursor)
+            if body is None and cursor < len(text):
+                body = text[cursor]
+                cursor += 1
+            return omml_run(decorated_symbol(kind, body or "")), cursor
+    if text[start] == "\\":
+        match = re.match(r"\\[A-Za-z]+", text[start:])
+        if match:
+            raw = match.group(0)
+            return omml_run(LATEX_SYMBOLS.get(raw, raw[1:])), start + len(raw)
+    if text[start] == "{":
+        group, cursor = parse_latex_group(text, start)
+        if group is not None:
+            return latex_to_omml_inner(group), cursor
+    end = start
+    while end < len(text) and text[end] not in "\\_^{}":
+        end += 1
+    if end == start:
+        return omml_run(text[start]), start + 1
+    return omml_run(text[start:end]), end
+
+
+def latex_to_omml_inner(value: Any) -> str:
+    text = strip_latex_delimiters(plain(value))
+    if not text:
+        return ""
+    text = text.replace(r"\left", "").replace(r"\right", "")
+    text = text.replace(r"\,", " ").replace(r"\;", " ").replace(r"\!", "")
+    parts: List[str] = []
+    index = 0
+    while index < len(text):
+        if text[index].isspace():
+            start = index
+            while index < len(text) and text[index].isspace():
+                index += 1
+            parts.append(omml_run(text[start:index]))
+            continue
+        base_xml, index = parse_latex_atom_to_omml(text, index)
+        sub_xml = ""
+        sup_xml = ""
+        while index < len(text) and text[index] in "_^":
+            marker = text[index]
+            script_xml, index = parse_latex_script(text, index + 1)
+            if marker == "_":
+                sub_xml = script_xml
+            else:
+                sup_xml = script_xml
+        parts.append(omml_apply_scripts(base_xml, sub_xml, sup_xml))
+    return "".join(parts)
+
+
+def latex_to_omml_paragraph(value: Any) -> str:
+    formula = plain(value)
+    if not formula:
+        formula = "□"
+    math_xml = latex_to_omml_inner(formula)
+    if not math_xml:
+        math_xml = omml_run(latex_to_readable_formula(formula) or formula)
+    return (
+        '<w:p><w:pPr><w:pStyle w:val="FormulaDisplay"/></w:pPr>'
+        '<m:oMathPara><m:oMath>'
+        f"{math_xml}"
+        "</m:oMath></m:oMathPara></w:p>"
+    )
+
+
 class DocxBuilder:
     def __init__(self, title: str) -> None:
         self.title = title
@@ -1219,8 +1371,7 @@ class DocxBuilder:
         self.body.append(f"<w:p>{style_xml}<w:r>{run_props}{''.join(run_parts)}</w:r></w:p>")
 
     def add_formula_display(self, formula: Any) -> None:
-        readable = latex_to_readable_formula(formula)
-        self.add_paragraph(readable or formula, style="FormulaDisplay")
+        self.body.append(latex_to_omml_paragraph(formula))
 
     def add_bullet(self, text: Any, style: str = "ListBullet") -> None:
         self.add_paragraph(f"- {text}", style=style)
@@ -1835,6 +1986,8 @@ def write_prompt_pack(extraction: Dict[str, Any], output: Path, language: str) -
         "- Add final-exam fields: exam_focus, key_takeaways, memory_hooks, likely_questions, common_mistakes, prerequisites, difficulty, estimated_review_minutes, and tags.",
         "- likely_questions should include active-recall questions and at least one exam-style question for important formulas or algorithms.",
         "- Add `practice_questions` when possible: short original or open-source-adapted exercises with answer, solution steps, difficulty, and source/source_url if externally inspired.",
+        "- If OCR/math-recognition data is merged, treat it as a signal but mark uncertain formulas as `需核对`.",
+        "- For external practice-bank questions, preserve source/source_url and adapt the wording to the current slide rather than copying long passages.",
         "- Avoid generic filler. Do not write vague lines such as 'put this slide back into the chapter logic' unless you name the exact concept, formula, or algorithm.",
         "- detailed_explanation must include a reasoning chain: definition -> condition -> why it works -> how to use it -> where students make mistakes.",
         "- For each important formula, explain units/base/log convention and give a concrete numeric mini-example.",
@@ -2395,10 +2548,44 @@ def practice_question_from_dict(raw: Dict[str, Any], slide_number: int, title: s
     }
 
 
-def build_slide_practice_questions(slide: Dict[str, Any], note: Dict[str, Any], max_items: int = 3) -> List[Dict[str, Any]]:
+def load_practice_bank(path: Optional[Path]) -> List[Dict[str, Any]]:
+    if not path:
+        return []
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    items = raw if isinstance(raw, list) else raw.get("questions", [])
+    return [item for item in items if isinstance(item, dict) and plain(item.get("question"))]
+
+
+def practice_bank_matches(bank_item: Dict[str, Any], terms: List[str]) -> bool:
+    haystack = plain(
+        [
+            bank_item.get("terms") or [],
+            bank_item.get("tags") or [],
+            bank_item.get("topic") or "",
+            bank_item.get("question") or "",
+        ]
+    ).lower()
+    return any(term.lower() in haystack for term in terms if len(term) >= 2)
+
+
+def build_slide_practice_questions(
+    slide: Dict[str, Any],
+    note: Dict[str, Any],
+    max_items: int = 3,
+    practice_bank: Optional[List[Dict[str, Any]]] = None,
+) -> List[Dict[str, Any]]:
     number = int(slide.get("number", 0) or 0)
     title = note_field(note, "title") or slide.get("title", f"Slide {number}")
     items: List[Dict[str, Any]] = []
+    terms = extract_topic_terms(note, slide, limit=10)
+    for raw in practice_bank or []:
+        if practice_bank_matches(raw, terms):
+            item = practice_question_from_dict(raw, number, title)
+            item["source"] = item["source"] if item["source"] != "PPT 内容原创生成" else "开放题源改编"
+            items.append(item)
+        if len(items) >= max_items:
+            return items[:max_items]
+
     for raw in as_list(note_field(note, "practice_questions", "exercises")):
         if isinstance(raw, dict):
             item = practice_question_from_dict(raw, number, title)
@@ -2481,11 +2668,17 @@ def build_slide_practice_questions(slide: Dict[str, Any], note: Dict[str, Any], 
     return items[:max_items]
 
 
-def write_practice_questions(extraction: Dict[str, Any], notes: Dict[int, Dict[str, Any]], md_path: Path, json_path: Path) -> None:
+def write_practice_questions(
+    extraction: Dict[str, Any],
+    notes: Dict[int, Dict[str, Any]],
+    md_path: Path,
+    json_path: Path,
+    practice_bank: Optional[List[Dict[str, Any]]] = None,
+) -> None:
     items: List[Dict[str, Any]] = []
     for slide in extraction.get("slides", []):
         number = int(slide.get("number", 0) or 0)
-        items.extend(build_slide_practice_questions(slide, notes.get(number, {}), max_items=2))
+        items.extend(build_slide_practice_questions(slide, notes.get(number, {}), max_items=2, practice_bank=practice_bank))
     lines = [
         "# 小题练习",
         "",
@@ -2673,6 +2866,215 @@ def write_mistake_log(output: Path) -> None:
     )
 
 
+def load_wrong_answers(path: Optional[Path]) -> Dict[str, Any]:
+    if not path:
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def write_adaptive_review(
+    extraction: Dict[str, Any],
+    notes: Dict[int, Dict[str, Any]],
+    output: Path,
+    template_path: Path,
+    wrong_answers: Optional[Dict[str, Any]] = None,
+) -> None:
+    practice_items: List[Dict[str, Any]] = []
+    for slide in extraction.get("slides", []):
+        number = int(slide.get("number", 0) or 0)
+        practice_items.extend(build_slide_practice_questions(slide, notes.get(number, {}), max_items=1))
+    template = {
+        "missed": [
+            {
+                "slide": item.get("slide"),
+                "question": item.get("question"),
+                "your_answer": "",
+                "root_cause": "概念不清 / 公式不会用 / 审题错误 / 计算错误 / 图表没看懂",
+                "note": "",
+            }
+            for item in practice_items[:20]
+        ]
+    }
+    template_path.write_text(json.dumps(template, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    missed = []
+    if wrong_answers:
+        raw_missed = wrong_answers.get("missed", wrong_answers if isinstance(wrong_answers, list) else [])
+        missed = [item for item in raw_missed if isinstance(item, dict)]
+    lines = [
+        "# 错题反馈路径",
+        "",
+        "这个文件把错题变成二次学习路线。没有传入错题时，它会给出高风险页面和错题记录模板；传入 `--wrong-answers-json` 后会按错因重新排序复习页。",
+        "",
+        f"- 错题输入模板: `{template_path.name}`",
+        "",
+    ]
+    if missed:
+        slide_counts: Dict[int, int] = {}
+        causes: Dict[str, int] = {}
+        for item in missed:
+            try:
+                number = int(item.get("slide") or item.get("page") or 0)
+            except Exception:
+                number = 0
+            if number:
+                slide_counts[number] = slide_counts.get(number, 0) + 1
+            cause = plain(item.get("root_cause")) or "未分类"
+            causes[cause] = causes.get(cause, 0) + 1
+        lines += ["## 优先重学", ""]
+        for number, count in sorted(slide_counts.items(), key=lambda pair: (-pair[1], pair[0]))[:10]:
+            slide = next((s for s in extraction.get("slides", []) if int(s.get("number", 0) or 0) == number), {})
+            note = notes.get(number, {})
+            focus = plain(note_field(note, "exam_focus")) or plain(note_field(note, "key_takeaways")) or slide.get("title", "")
+            lines.append(f"- S{number}: 错 {count} 次。先重看 `{focus}`，再做对应小题。")
+        lines += ["", "## 错因统计", ""]
+        for cause, count in sorted(causes.items(), key=lambda pair: (-pair[1], pair[0])):
+            lines.append(f"- {cause}: {count}")
+        lines += ["", "## 明日复习动作", ""]
+        lines += [
+            "1. 只重看上面列出的页面，不要重新通读整份 PPT。",
+            "2. 每个错因写一句“以后看到什么信号就用什么方法”。",
+            "3. 重新做 `07_小题练习.md` 中对应题目，错题写进错题本。",
+        ]
+    else:
+        lines += ["## 高风险页面", ""]
+        risky = []
+        for slide in extraction.get("slides", []):
+            number = int(slide.get("number", 0) or 0)
+            note = notes.get(number, {})
+            reasons = []
+            if slide_has_formula(slide) or note_field(note, "formula_explanations", "formulas"):
+                reasons.append("公式")
+            if slide_has_visual(slide):
+                reasons.append("图表")
+            if plain(note_field(note, "difficulty")) in {"困难", "hard", "difficult"}:
+                reasons.append("高难度")
+            if note_field(note, "common_mistakes"):
+                reasons.append("有常见错误")
+            if reasons:
+                risky.append((number, "、".join(reasons), plain(note_field(note, "exam_focus")) or slide.get("title", "")))
+        if not risky:
+            lines.append("- 暂未发现明显高风险页。先做 `07_小题练习.md`，再把错题填入模板。")
+        for number, reason, focus in risky[:12]:
+            lines.append(f"- S{number} [{reason}]: {focus}")
+        lines += [
+            "",
+            "## 使用方式",
+            "",
+            "1. 做完小题后，把错题填入 `wrong_answer_template.json`。",
+            "2. 重新运行并传入 `--wrong-answers-json wrong_answer_template.json`。",
+            "3. 新的错题反馈路径会按错因和错题页重新排序。",
+        ]
+    output.write_text("\n".join(lines), encoding="utf-8")
+
+
+def file_uri_or_empty(path_text: str) -> str:
+    if not path_text:
+        return ""
+    path = Path(path_text)
+    if path.exists():
+        try:
+            return path.resolve().as_uri()
+        except ValueError:
+            return ""
+    return ""
+
+
+def write_study_html(extraction: Dict[str, Any], notes: Dict[int, Dict[str, Any]], output: Path) -> None:
+    modules = build_learning_modules(extraction, notes)
+    practice_items: List[Dict[str, Any]] = []
+    for slide in extraction.get("slides", []):
+        number = int(slide.get("number", 0) or 0)
+        practice_items.extend(build_slide_practice_questions(slide, notes.get(number, {}), max_items=1))
+    nav_items = "\n".join(
+        f'<a href="#module-{module["index"]}">模块 {module["index"]}: {html_escape(module["title"])}</a>' for module in modules
+    )
+    module_cards = []
+    for module in modules:
+        module_cards.append(
+            f"""
+<section class="panel" id="module-{module['index']}">
+  <h2>{module['index']}. {html_escape(module['title'])}</h2>
+  <p><strong>覆盖页面:</strong> {html_escape(slide_span(module['slides']))}</p>
+  <p><strong>学习目标:</strong> {html_escape(module['goal'])}</p>
+  <p><strong>必看页:</strong> {html_escape('；'.join(f"S{n}({r})" for n, r in module['focus']))}</p>
+  <ul>{''.join(f"<li>{html_escape(item)}</li>" for item in module['checkpoints'])}</ul>
+</section>
+""".strip()
+        )
+    slide_cards = []
+    for slide in extraction.get("slides", []):
+        number = int(slide.get("number", 0) or 0)
+        note = notes.get(number, {})
+        image_uri = file_uri_or_empty(slide.get("screenshot", ""))
+        formula_html = ""
+        for formula in as_list(note_field(note, "formula_explanations", "formulas")):
+            if isinstance(formula, dict) and formula.get("formula"):
+                formula_html += f'<div class="formula">{html_escape(latex_to_readable_formula(formula.get("formula")) or formula.get("formula"))}</div>'
+        slide_cards.append(
+            f"""
+<article class="slide-card">
+  <h3>S{number}: {html_escape(plain(note_field(note, 'title') or slide.get('title', '')))}</h3>
+  {'<img src="' + html_escape(image_uri) + '" alt="slide screenshot">' if image_uri else ''}
+  <p><strong>考点:</strong> {html_escape(plain(note_field(note, 'exam_focus')) or '待补写')}</p>
+  <p><strong>核心:</strong> {html_escape(plain(note_field(note, 'key_takeaways')) or plain(note_field(note, 'what_it_says', 'summary')) or '待补写')}</p>
+  {formula_html}
+</article>
+""".strip()
+        )
+    practice_cards = "\n".join(
+        f"""
+<details>
+  <summary>S{item['slide']}: {html_escape(item['question'])}</summary>
+  <p><strong>答案:</strong> {html_escape(item['answer'])}</p>
+  <p><strong>思路:</strong> {html_escape(item['solution'])}</p>
+</details>
+""".strip()
+        for item in practice_items
+    )
+    html = f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PPT 学习页面</title>
+  <style>
+    body {{ margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #172033; background: #f6f7fb; }}
+    header {{ padding: 24px 32px; background: #172033; color: white; }}
+    main {{ display: grid; grid-template-columns: 260px 1fr; gap: 24px; padding: 24px; }}
+    nav {{ position: sticky; top: 16px; align-self: start; background: white; border: 1px solid #dde3ee; padding: 16px; }}
+    nav a {{ display: block; color: #1d4ed8; text-decoration: none; margin: 8px 0; }}
+    .panel, .slide-card, details {{ background: white; border: 1px solid #dde3ee; padding: 18px; margin-bottom: 16px; }}
+    h1, h2, h3 {{ margin-top: 0; }}
+    img {{ max-width: 100%; border: 1px solid #e5e7eb; }}
+    .formula {{ font-family: "Cambria Math", "Times New Roman", serif; background: #ecfdf5; color: #064e3b; padding: 10px; text-align: center; font-size: 1.15rem; margin: 8px 0; }}
+    @media (max-width: 800px) {{ main {{ grid-template-columns: 1fr; }} nav {{ position: static; }} }}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>PPT 学习页面</h1>
+    <p>{html_escape(str(extraction.get('source', '')))}</p>
+  </header>
+  <main>
+    <nav>
+      <strong>学习路径</strong>
+      {nav_items}
+      <a href="#slides">逐页讲义</a>
+      <a href="#practice">小题练习</a>
+    </nav>
+    <div>
+      {''.join(module_cards)}
+      <section class="panel" id="slides"><h2>逐页讲义</h2>{''.join(slide_cards)}</section>
+      <section class="panel" id="practice"><h2>小题练习</h2>{practice_cards}</section>
+    </div>
+  </main>
+</body>
+</html>
+"""
+    output.write_text(html, encoding="utf-8")
+
+
 def write_study_dashboard(extraction: Dict[str, Any], notes: Dict[int, Dict[str, Any]], output: Path, study_dir: Path) -> None:
     formula_slides = [slide.get("number") for slide in extraction.get("slides", []) if slide_has_formula(slide)]
     visual_slides = [slide.get("number") for slide in extraction.get("slides", []) if slide_has_visual(slide)]
@@ -2694,6 +3096,8 @@ def write_study_dashboard(extraction: Dict[str, Any], notes: Dict[int, Dict[str,
         f"- [{(study_dir / 'one_page_review.md').name}](one_page_review.md)",
         f"- [{(study_dir / 'active_recall_questions.md').name}](active_recall_questions.md)",
         f"- [{(study_dir / 'practice_questions.md').name}](practice_questions.md)",
+        f"- [{(study_dir / 'study_index.html').name}](study_index.html)",
+        f"- [{(study_dir / 'adaptive_review.md').name}](adaptive_review.md)",
         f"- [{(study_dir / 'formula_sheet.md').name}](formula_sheet.md)",
         f"- [{(study_dir / 'flashcards_anki.csv').name}](flashcards_anki.csv)",
         f"- [{(study_dir / 'flashcards.md').name}](flashcards.md)",
@@ -2706,9 +3110,10 @@ def write_study_dashboard(extraction: Dict[str, Any], notes: Dict[int, Dict[str,
         "2. Read the handout pages for the current module only.",
         "3. Answer active recall questions without opening the slides.",
         "4. Do `practice_questions.md`, then read the answer and solution steps.",
-        "5. Import `flashcards_anki.csv` into Anki or review `flashcards.md` manually.",
-        "6. Rework every formula from `formula_sheet.md` with a small example.",
-        "7. Put every wrong answer into the mistake log and revisit it the next day.",
+        "5. Open `study_index.html` for a guided local review page.",
+        "6. Import `flashcards_anki.csv` into Anki or review `flashcards.md` manually.",
+        "7. Rework every formula from `formula_sheet.md` with a small example.",
+        "8. Put every wrong answer into the mistake log and revisit it with `adaptive_review.md`.",
     ]
     output.write_text("\n".join(lines), encoding="utf-8")
 
@@ -2720,6 +3125,8 @@ def write_study_pack(
     exam_date: Optional[str],
     daily_minutes: int,
     target_score: Optional[str],
+    wrong_answers: Optional[Dict[str, Any]] = None,
+    practice_bank: Optional[List[Dict[str, Any]]] = None,
 ) -> None:
     study_dir.mkdir(parents=True, exist_ok=True)
     write_learning_path(extraction, notes, study_dir / "learning_path.md")
@@ -2728,7 +3135,9 @@ def write_study_pack(
     write_one_page_review(extraction, notes, study_dir / "one_page_review.md")
     write_formula_sheet(extraction, notes, study_dir / "formula_sheet.md")
     write_active_recall(extraction, notes, study_dir / "active_recall_questions.md", study_dir / "active_recall_questions.json")
-    write_practice_questions(extraction, notes, study_dir / "practice_questions.md", study_dir / "practice_questions.json")
+    write_practice_questions(extraction, notes, study_dir / "practice_questions.md", study_dir / "practice_questions.json", practice_bank=practice_bank)
+    write_adaptive_review(extraction, notes, study_dir / "adaptive_review.md", study_dir / "wrong_answer_template.json", wrong_answers=wrong_answers)
+    write_study_html(extraction, notes, study_dir / "study_index.html")
     write_flashcards(extraction, notes, study_dir / "flashcards_anki.csv", study_dir / "flashcards.md")
     write_mistake_log(study_dir / "mistake_log_template.md")
     write_concept_map(extraction, notes, study_dir / "concept_map.mmd")
@@ -2779,6 +3188,9 @@ def write_start_here(
             ("formula", "formula_sheet.md", "05_公式速查.md"),
             ("mistakes", "mistake_log_template.md", "06_错题本模板.md"),
             ("practice", "practice_questions.md", "07_小题练习.md"),
+            ("html", "study_index.html", "08_学习页面.html"),
+            ("adaptive", "adaptive_review.md", "09_错题反馈路径.md"),
+            ("wrong_template", "wrong_answer_template.json", "可选_错题输入模板.json"),
             ("anki", "flashcards_anki.csv", "可选_Anki卡片.csv"),
             ("plan", "exam_cram_plan.md", "可选_冲刺计划.md"),
         ]
@@ -2834,6 +3246,9 @@ def write_start_here(
     ]
     optional = [
         ("一页纸总览", "overview", "考前快速过全局重点。"),
+        ("学习页面", "html", "在浏览器里按模块复习，题目答案可折叠。"),
+        ("错题反馈路径", "adaptive", "做完题后按错因重新安排复习。"),
+        ("错题输入模板", "wrong_template", "把错题填进去后可用 --wrong-answers-json 生成二次学习路径。"),
         ("Anki 卡片", "anki", "导入 Anki 做间隔复习。"),
         ("错题本模板", "mistakes", "把不会的题、错因和复盘写进去。"),
         ("冲刺计划", "plan", "临近期末时按天安排。"),
@@ -2857,8 +3272,9 @@ def write_start_here(
         "2. 打开 `01_复习讲义.docx`，只读当前模块对应页面。",
         "3. 合上讲义，做 `04_主动回忆题.md`。",
         "4. 做 `07_小题练习.md`，先写答案，再看解题思路。",
-        "5. 错题写入 `06_错题本模板.md`。",
-        "6. 考前只看 `03_一页纸总览.md`、`05_公式速查.md` 和错题本。",
+        "5. 打开 `08_学习页面.html` 做折叠式复习。",
+        "6. 错题写入 `06_错题本模板.md` 或 `可选_错题输入模板.json`。",
+        "7. 考前只看 `03_一页纸总览.md`、`05_公式速查.md`、`09_错题反馈路径.md` 和错题本。",
         "",
     ]
     start = deliverables_dir / "START_HERE.md"
@@ -2873,6 +3289,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("-o", "--output", help="Output .docx path")
     parser.add_argument("-w", "--workdir", help="Directory for screenshots, extracted images, and JSON files")
     parser.add_argument("--notes-json", help="Filled notes JSON to include in the final Word document")
+    parser.add_argument("--ocr-json", help="Optional OCR/math-recognition JSON to merge into extracted slide text and formula candidates")
+    parser.add_argument("--practice-bank-json", help="Optional open-education practice bank JSON with questions, answers, solutions, terms, and source URLs")
+    parser.add_argument("--wrong-answers-json", help="Optional wrong-answer JSON used to generate adaptive review guidance")
     parser.add_argument("--notes-markdown", help="Output final study notes as Markdown; defaults to workdir/final_notes.md")
     parser.add_argument("--prompt-pack", help="Output LLM/VLM prompt pack; defaults to workdir/prompt_pack.md")
     parser.add_argument("--study-pack-dir", help="Directory for final-exam review pack; defaults to workdir/study_pack")
@@ -2909,6 +3328,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 2
+    apply_ocr_json(extraction, Path(args.ocr_json).expanduser().resolve() if args.ocr_json else None)
 
     extraction_path = workdir / "extraction.json"
     extraction_path.write_text(json.dumps(extraction, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -2922,13 +3342,24 @@ def main(argv: Optional[List[str]] = None) -> int:
     write_markdown(extraction, markdown_path)
 
     notes = load_notes(Path(args.notes_json).expanduser().resolve() if args.notes_json else None)
+    practice_bank = load_practice_bank(Path(args.practice_bank_json).expanduser().resolve() if args.practice_bank_json else None)
+    wrong_answers = load_wrong_answers(Path(args.wrong_answers_json).expanduser().resolve() if args.wrong_answers_json else None)
     notes_markdown_path = Path(args.notes_markdown).expanduser().resolve() if args.notes_markdown else workdir / "final_notes.md"
     prompt_pack_path = Path(args.prompt_pack).expanduser().resolve() if args.prompt_pack else workdir / "prompt_pack.md"
     write_notes_markdown(extraction, notes, notes_markdown_path)
     write_prompt_pack(extraction, prompt_pack_path, args.language)
     study_pack_dir = Path(args.study_pack_dir).expanduser().resolve() if args.study_pack_dir else workdir / "study_pack"
     if not args.no_study_pack:
-        write_study_pack(extraction, notes, study_pack_dir, args.exam_date, args.daily_minutes, args.target_score)
+        write_study_pack(
+            extraction,
+            notes,
+            study_pack_dir,
+            args.exam_date,
+            args.daily_minutes,
+            args.target_score,
+            wrong_answers=wrong_answers,
+            practice_bank=practice_bank,
+        )
 
     report = build_quality_report(extraction, notes, args.fail_under, args.study_mode)
     quality_json_path = workdir / "quality_report.json"

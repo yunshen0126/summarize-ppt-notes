@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.0
+
+- Rewrite README in Chinese with full usage for Word equations, OCR JSON, practice banks, adaptive review, HTML study page, and benchmarks.
+- Write formulas as real Word Office Math / OMML objects for common LaTeX structures.
+- Add `study_index.html`, `adaptive_review.md`, `wrong_answer_template.json`, OCR JSON merge, practice-bank JSON matching, and benchmark runner.
+
 ## 0.8.0
 
 - Improve Word formula display so common LaTeX appears as readable formula text instead of raw source code.

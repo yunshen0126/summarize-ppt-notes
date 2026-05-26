@@ -52,11 +52,14 @@ Recommended public repo structure:
 - Local-first: users can inspect all extracted files before any AI step.
 - Evidence-preserving: full-slide screenshots stay inside the Word output.
 - Formula-aware: formula candidates trigger required explanations and examples.
+- Word-native equations: common formulas are written as Office Math / OMML instead of raw LaTeX text.
 - Quality-gated: missing explanation fields are caught before delivery.
 - Skill-native: Codex can use the same repository as both documentation and automation.
 - Markdown-native review: final notes and prompt packs can be reviewed directly on GitHub.
 - Teacher-like guidance: the output starts with a chapter-style learning path so students know what to study first and when to move on.
 - Practice loop: students get short exercises with answer and solution steps instead of only reading notes.
+- Adaptive loop: wrong-answer JSON can regenerate a targeted review path.
+- Local HTML review: a self-contained `study_index.html` gives a more product-like learning surface.
 - Final-exam loop: the output includes active recall, flashcards, formula sheets, a mistake log, and a cram plan.
 
 ## Pricing Hypothesis
@@ -76,11 +79,10 @@ Recommended public repo structure:
 
 ## Near-Term Roadmap
 
-1. Add real OMML-to-LaTeX conversion.
-2. Add optional OCR adapter interface.
+1. Expand OMML coverage for matrices, aligned equations, piecewise functions, and integrals.
+2. Add production OCR/math recognition adapters.
 3. Add `.dotx` or template-based Word styling.
-4. Add optional open-education web matching for practice questions with source attribution.
-5. Add adaptive diagnostics that change the learning path from a student's wrong answers.
-6. Add benchmark decks with expected extraction snapshots.
-7. Add a small local review UI for filling `notes_template.json`.
-8. Add LMS export and Anki package (`.apkg`) generation.
+4. Add optional open-education web search with source attribution and license filtering.
+5. Add benchmark decks with expected extraction snapshots.
+6. Add a small local review UI for filling `notes_template.json`.
+7. Add LMS export and Anki package (`.apkg`) generation.

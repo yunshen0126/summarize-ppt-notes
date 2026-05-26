@@ -1,40 +1,57 @@
 # Summarize PPT Notes
 
-Turn lecture slides into structured Word study notes with slide screenshots, extracted text, formulas, images, chart metadata, and per-slide teaching explanations.
+把课程 PPT / PDF 变成能复习、能理解、能做题的学习资料包。
 
-This repository is both a Codex Skill and a local extraction toolkit. The Skill tells Codex how to reason over each page; the CLI handles deterministic file work such as rendering slides, extracting images, producing JSON templates, and building `.docx` output.
+这个项目既是一个 Codex Skill，也是一个本地 CLI 工具。它的目标不是简单总结 PPT，而是尽量像老师一样处理课件：保留每页截图，识别文字、图片、图表和公式，解释每页在讲什么、为什么重要、期末怎么考，并生成学习路径、练习题、公式表、错题反馈和 Word 讲义。
 
-## Why It Exists
+## 核心定位
 
-Most PPT summarizers stop at short bullet summaries. This project targets serious courseware and technical presentations where the useful output must include:
+很多 PPT 工具只做“转 Markdown”或“短摘要”。本项目更适合：
 
-- full-page slide screenshots
-- text, notes, tables, images, charts, and formula candidates
-- explanations of what each slide is for
-- detailed walkthroughs for dense diagrams, derivations, algorithms, and equations
-- worked examples for complex formulas
-- a quality report that flags missing explanations before delivery
+- 期末复习
+- 公式密集课程
+- 图表/流程图较多的课件
+- 需要逐页讲解的课程材料
+- 老师或助教批量生成讲义
 
-## Features
+核心承诺：
 
-- Supports `.pptx`, `.ppt`, and slide `.pdf`
-- Renders full-slide screenshots through LibreOffice + PyMuPDF
-- Extracts PowerPoint XML text, speaker notes, tables, images, chart/diagram relationships, and formula-like expressions
-- Generates `extraction.json`, `notes_template.json`, `extraction.md`, `quality_report.json`, and `quality_report.md`
-- Generates final notes as Markdown plus an LLM/VLM prompt pack for review workflows
-- Generates a final-exam study pack: teacher-style learning path, cram plan, active-recall questions, small practice questions with answers/solutions, formula sheet, Anki CSV, mistake-log template, one-page review, and Mermaid concept map
-- Builds a Word `.docx` with slide screenshots, structured notes, and cleaner formula display instead of raw LaTeX as the main formula view
-- Can run as a Codex Skill or as a standalone CLI
-- Works offline for extraction; no source files are uploaded by the scripts
+> 不是把 PPT 压缩成几段话，而是把 PPT 变成一套可学习、可检查、可做题的复习系统。
 
-## Quick Start
+## 主要功能
+
+- 支持 `.pptx`、`.ppt`、课件型 `.pdf`
+- 生成完整 Word 复习讲义
+- 每页保留原始截图，方便核对公式、图片和图表
+- 提取 PPT 文字、备注、表格、图片、图表关系和公式候选
+- Word 中使用真正的 Office Math / OMML 公式对象，而不是只显示 LaTeX 源码
+- 生成逐页讲解：这一页干什么、讲了什么、复杂内容详解、图表解释、公式说明、例题
+- 自动生成 `00_学习路径.md`，按老师讲课思路组织章节式学习路线
+- 自动生成 `07_小题练习.md`，包含题目、答案、解题思路、难度和来源说明
+- 自动生成 `08_学习页面.html`，本地浏览器打开即可按模块复习
+- 自动生成 `09_错题反馈路径.md` 和错题输入模板
+- 支持 `--wrong-answers-json`，根据错题重新生成二次学习路径
+- 支持 `--ocr-json`，接入外部 OCR / 数学公式识别结果
+- 支持 `--practice-bank-json`，接入开放教育题库或自建题库
+- 生成 Anki CSV、公式速查、主动回忆题、错题本模板、冲刺计划、一页纸总览、概念图
+- 生成质量报告，检查哪些页解释不够深、哪些字段缺失
+- 默认本地处理文件，脚本本身不会上传课件
+
+## 快速开始
+
+先检查环境：
 
 ```bash
 python3 scripts/doctor.py
+```
+
+生成初稿：
+
+```bash
 python3 scripts/ppt_notes_exporter.py "slides.pptx" --output "PPT学习笔记.docx"
 ```
 
-The first run creates a work directory beside the Word file:
+第一次运行会生成一个工作目录：
 
 ```text
 PPT学习笔记_work/
@@ -45,75 +62,30 @@ PPT学习笔记_work/
 ├── extraction.json
 ├── extraction.md
 ├── notes_template.json
+├── prompt_pack.md
 ├── quality_report.json
 └── quality_report.md
 ```
 
-Fill `notes_template.json` with slide explanations, then rebuild the final Word document:
+把 `notes_template.json` 填成高质量逐页讲解后，重新生成最终版：
 
 ```bash
 python3 scripts/ppt_notes_exporter.py "slides.pptx" \
   --notes-json "PPT学习笔记_work/notes_template.json" \
   --output "PPT学习笔记.docx" \
   --notes-markdown "PPT学习笔记_work/final_notes.md" \
-  --prompt-pack "PPT学习笔记_work/prompt_pack.md" \
-  --exam-date 2026-06-20 \
   --study-mode final \
   --layout study \
   --output-profile teacher \
   --fail-under 85
 ```
 
-## Use As A Codex Skill
+## 学生应该先看什么
 
-Copy or keep this folder as a skill directory:
-
-```bash
-mkdir -p ~/.codex/skills
-cp -R summarize-ppt-notes ~/.codex/skills/
-```
-
-Then ask Codex:
+默认会生成一个干净的交付目录：
 
 ```text
-Use $summarize-ppt-notes to turn this PPT into a full Word study-notes document.
-```
-
-## CLI Options
-
-```bash
-python3 scripts/ppt_notes_exporter.py "slides.pptx" \
-  --slides 1,3-5 \
-  --max-slides 10 \
-  --dpi 180 \
-  --output notes.docx \
-  --workdir notes_work \
-  --notes-json notes_filled.json \
-  --fail-under 90
-```
-
-Useful modes:
-
-- `--template-only`: generate extraction files without building DOCX
-- `--no-render`: skip LibreOffice/PDF rendering for fast XML-only extraction
-- `--slides 1,3-5`: export only selected slides
-- `--fail-under 90`: fail the process if note coverage is below the threshold
-- `--notes-markdown`: write final notes as Markdown for GitHub preview or review
-- `--prompt-pack`: write a slide-by-slide prompt pack for another model or human reviewer
-- `--study-mode final`: require final-exam fields in the quality report
-- `--layout study`: polished review handout; `--layout audit` includes full raw extraction for debugging
-- `--output-profile teacher`: default clean output; creates `*_deliverables/START_HERE.md`
-- `--output-profile complete`: clean output plus all artifact paths
-- `--output-profile debug`: print raw artifact paths without packaging a clean student folder
-- `--study-pack-dir`: choose where the final-exam review pack is written
-- `--exam-date`: generate a cram plan relative to a target exam date
-
-## What Students Should Open
-
-The default teacher profile creates a clean `*_deliverables/` folder. Open this first:
-
-```text
-*_deliverables/
+PPT学习笔记_deliverables/
 ├── START_HERE.md
 ├── 00_学习路径.md
 ├── 01_复习讲义.docx
@@ -123,95 +95,254 @@ The default teacher profile creates a clean `*_deliverables/` folder. Open this 
 ├── 05_公式速查.md
 ├── 06_错题本模板.md
 ├── 07_小题练习.md
-└── 可选_Anki卡片.csv
+├── 08_学习页面.html
+├── 09_错题反馈路径.md
+├── 可选_错题输入模板.json
+├── 可选_Anki卡片.csv
+├── 可选_冲刺计划.md
+└── 质量检查.md
 ```
 
-Students should start from `START_HERE.md`, then `00_学习路径.md`. The learning path groups adjacent slides into chapter-style modules, names the must-read slides, and gives a self-test standard before moving on. The work directory contains debug files and should not be the first thing a learner opens.
+推荐顺序：
 
-## Final-Exam Study Pack
+1. 打开 `START_HERE.md`
+2. 看 `00_学习路径.md`，先知道按什么顺序学
+3. 打开 `01_复习讲义.docx`，只读当前模块对应页面
+4. 合上讲义做 `04_主动回忆题.md`
+5. 做 `07_小题练习.md`，先写答案，再看解题思路
+6. 打开 `08_学习页面.html` 做折叠式复习
+7. 把错题写入 `06_错题本模板.md` 或 `可选_错题输入模板.json`
+8. 考前只看一页纸总览、公式速查和错题反馈路径
 
-The generated `study_pack/` folder is designed for students who need to convert lecture slides into an actual review loop:
+## 真正的 Word 公式
 
-- `README.md`: dashboard and file map
-- `learning_path.md`: chapter-style route through the deck, with goals, must-read slides, checkpoints, and common traps
-- `exam_cram_plan.md`: day-by-day review plan
-- `one_page_review.md`: high-yield summary
-- `active_recall_questions.md` and `.json`: closed-book self-test questions
-- `practice_questions.md` and `.json`: short exercises with answers, solution steps, difficulty, and source notes
-- `formula_sheet.md`: formulas, meanings, conditions, and examples
-- `flashcards_anki.csv`: importable flashcards
-- `flashcards.md`: readable flashcards
-- `mistake_log_template.md`: error notebook template
-- `concept_map.mmd`: Mermaid concept map
+脚本会把常见 LaTeX 公式转换成 Word 的 Office Math / OMML 结构。
 
-See [docs/FINAL_EXAM_WORKFLOW.md](docs/FINAL_EXAM_WORKFLOW.md) for the recommended review method.
-See [docs/OUTPUT_QUALITY.md](docs/OUTPUT_QUALITY.md) for the anti-fluff writing standard used by the quality gate.
+例如 JSON 中写：
 
-## Dependencies
+```json
+{
+  "formula": "MSE = \\frac{1}{n}\\sum_{i=1}^{n}(y_i-\\hat{y}_i)^2"
+}
+```
 
-Required:
+Word 里会以公式对象写入，而不是把 `\\frac{...}` 当普通文本显示。当前支持常见结构：
+
+- `\frac{a}{b}`
+- 上标和下标，如 `x_i^2`
+- `\sum_{i=1}^{n}`
+- `\sqrt{x}`
+- 常见希腊字母和数学符号
+- `\hat{y}`、`\bar{x}`、`\tilde{x}`
+
+复杂 LaTeX 后续还可以继续扩展到更完整的 OMML 转换。
+
+## OCR / 截图公式识别接口
+
+很多 PPT 的公式其实是图片，无法从 XML 中直接提取。这个项目提供 `--ocr-json` 接口，可以把外部 OCR 或数学公式识别结果合并进提取结果：
+
+```bash
+python3 scripts/ppt_notes_exporter.py "slides.pptx" \
+  --ocr-json "ocr_results.json" \
+  --output "PPT学习笔记.docx"
+```
+
+`ocr_results.json` 示例：
+
+```json
+{
+  "slides": [
+    {
+      "number": 3,
+      "text": ["OCR 识别出的文字"],
+      "formula_candidates": ["H(X) = -\\sum_x p(x)\\log p(x)"],
+      "visual_explanation": "图中展示了信源符号概率分布。"
+    }
+  ]
+}
+```
+
+## 开放题库 / 自建题库接入
+
+默认小题会根据 PPT 内容原创生成。如果你有开放教育题库或自建题库，可以用 `--practice-bank-json` 接入：
+
+```bash
+python3 scripts/ppt_notes_exporter.py "slides.pptx" \
+  --notes-json "notes_filled.json" \
+  --practice-bank-json "practice_bank.json" \
+  --output "PPT学习笔记.docx"
+```
+
+题库格式：
+
+```json
+{
+  "questions": [
+    {
+      "terms": ["entropy", "information theory"],
+      "question": "已知两个符号概率分别为 1/2 和 1/2，求信源熵。",
+      "answer": "1 bit",
+      "solution": "代入 H(X)=-sum p(x)log2 p(x)，得到 1 bit。",
+      "difficulty": "基础",
+      "source": "开放教育题源改编",
+      "source_url": "https://example.edu/open-resource"
+    }
+  ]
+}
+```
+
+注意：不要直接复制商业题库。建议使用开放授权资料，保留来源链接，并改写成适配当前 PPT 的练习题。
+
+## 错题反馈路径
+
+做完题后，把错题填入 `可选_错题输入模板.json`，再运行：
+
+```bash
+python3 scripts/ppt_notes_exporter.py "slides.pptx" \
+  --notes-json "notes_filled.json" \
+  --wrong-answers-json "可选_错题输入模板.json" \
+  --output "PPT学习笔记.docx"
+```
+
+新的 `09_错题反馈路径.md` 会按错题页和错因重新安排复习顺序，告诉学生：
+
+- 哪几页必须重看
+- 错因集中在哪里
+- 明天应该怎么复习
+- 哪些题要重新做
+
+## 用作 Codex Skill
+
+把仓库放到 Codex skills 目录：
+
+```bash
+mkdir -p ~/.codex/skills
+cp -R summarize-ppt-notes ~/.codex/skills/
+```
+
+然后对 Codex 说：
+
+```text
+Use $summarize-ppt-notes to turn this PPT into final-exam review notes.
+```
+
+## 常用 CLI 参数
+
+```bash
+python3 scripts/ppt_notes_exporter.py "slides.pptx" \
+  --slides 1,3-5 \
+  --max-slides 10 \
+  --dpi 180 \
+  --output notes.docx \
+  --workdir notes_work \
+  --notes-json notes_filled.json \
+  --ocr-json ocr_results.json \
+  --practice-bank-json practice_bank.json \
+  --wrong-answers-json wrong_answers.json \
+  --fail-under 90
+```
+
+常用模式：
+
+- `--template-only`：只生成提取文件和模板，不生成 Word
+- `--no-render`：跳过截图渲染，适合快速 XML 提取
+- `--slides 1,3-5`：只处理指定页
+- `--max-slides 10`：只处理前 10 页
+- `--notes-json`：传入填好的逐页讲解
+- `--ocr-json`：合并外部 OCR / 公式识别结果
+- `--practice-bank-json`：接入开放题库或自建题库
+- `--wrong-answers-json`：根据错题生成二次学习路径
+- `--study-mode final`：质量检查要求期末复习字段完整
+- `--layout study`：生成学生友好的复习讲义
+- `--layout audit`：保留更多原始提取内容，适合调试
+- `--output-profile teacher`：默认，只输出干净交付目录
+- `--output-profile complete`：同时打印所有中间文件路径
+- `--output-profile debug`：只打印调试文件路径
+
+## Benchmark
+
+可以用 `benchmarks/run_benchmark.py` 检查更新是否破坏输出：
+
+```bash
+python3 benchmarks/run_benchmark.py examples/your_deck.pptx --max-slides 5
+```
+
+它会输出页数、质量分、公式页数量、图表页数量，以及学习路径、小题练习、HTML 页面、错题反馈是否生成。
+
+## 依赖
+
+必须：
 
 - Python 3.9+
 
-Recommended for full output:
+推荐：
 
-- LibreOffice, for PPT/PPTX/PPT to PDF rendering
-- PyMuPDF, for PDF text extraction and screenshots
-- Pillow, for accurate image sizing inside Word output
+- LibreOffice：用于 PPT/PPTX/PPT 转 PDF 和截图渲染
+- PyMuPDF：用于 PDF 文本和截图处理
+- Pillow：用于 Word 中图片尺寸计算
 
-Install Python extras for local development:
+安装开发依赖：
 
 ```bash
 python3 -m pip install --upgrade pip setuptools
 python3 -m pip install -e ".[dev,render]"
 ```
 
-On macOS, LibreOffice can be installed from the official app package or through Homebrew.
+## 项目结构
 
-## Architecture
-
-```mermaid
-flowchart LR
-  A["PPT/PPTX/PDF"] --> B["Local extractor"]
-  B --> C["Slide screenshots"]
-  B --> D["extraction.json"]
-  B --> E["notes_template.json"]
-  E --> F["Codex / human fills explanations"]
-  F --> G["quality report"]
-  F --> H["Word study notes"]
+```text
+summarize-ppt-notes/
+├── SKILL.md
+├── scripts/
+│   ├── ppt_notes_exporter.py
+│   └── doctor.py
+├── references/
+│   └── note-schema.md
+├── docs/
+├── examples/
+├── benchmarks/
+└── tests/
 ```
 
-## Comparison
+## 和普通转换工具的区别
 
-This project is intentionally narrower than general document converters. See [docs/COMPARISON.md](docs/COMPARISON.md) for the current positioning against MarkItDown, pptx2md, Unstructured, and Docling.
+本项目不追求成为所有格式的万能转换器。它更聚焦：
 
-## Commercial Direction
+- PPT 到学习讲义
+- 公式和图表解释
+- 期末复习路径
+- 主动回忆和小题练习
+- 错题反馈
+- 本地优先和可检查输出
 
-The open-source core should stay excellent at local extraction, document generation, and quality gates. Commercial layers can build on top without locking basic usage:
+MarkItDown、Unstructured、Docling 这类项目更适合作为上游解析或导入适配器；本项目的差异点是面向学生复习的教学闭环。
 
-- hosted batch processing
-- OCR/math recognition service for screenshot-only equations
-- template branding and school/company styles
-- paid model backends for automatic slide explanation
-- team workspace, history, and review workflow
+## 商业化方向
 
-That gives the project a clean open-core story: local, inspectable, privacy-respecting extraction remains free; high-volume automation and advanced recognition can become paid products.
+开源核心保持免费：
 
-See [docs/PRODUCT_STRATEGY.md](docs/PRODUCT_STRATEGY.md) for target users, packaging, paid tiers, and roadmap.
+- 本地提取
+- Word 生成
+- 学习路径
+- 小题练习
+- 错题反馈
+- 质量检查
+- Codex Skill 工作流
 
-## Privacy
+可商业化层：
 
-The included scripts process files locally. They do not call external APIs. If you connect Codex or another model to fill the generated notes, review that model provider's data policy before sending private courseware or company decks.
+- 批量处理
+- 更强 OCR / 数学公式识别
+- 学校或机构模板
+- 自动讲解模型
+- 团队协作和审核
+- LMS / Canvas / Moodle 导出
+- 私有化部署
 
-## Roadmap
+## 隐私
 
-- OCR plugin hook for formulas embedded only in screenshots
-- richer LaTeX/OMML-to-Word equation rendering
-- branded Word templates
-- PowerPoint comment export
-- richer chart data extraction
-- web UI for reviewing slide explanations before DOCX generation
+脚本默认在本地处理文件，不会主动上传课件。如果你使用 Codex 或其他模型填写 `notes_template.json`，请根据课件隐私级别自行判断是否可以发送给模型服务。
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT。见 [LICENSE](LICENSE)。

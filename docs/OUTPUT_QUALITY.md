@@ -13,6 +13,7 @@ Good notes are:
 - exam-aware: they name likely question types and common mistakes
 - guided: they tell students which module to study first, which slides are must-read, and when they are ready to move on
 - actionable: they include short practice questions with answers and solution steps
+- word-native: formulas in Word should be equation objects when the converter can represent them safely
 
 ## Bad Notes
 
@@ -65,3 +66,10 @@ For practice questions:
 3. Tie the question to a slide concept, formula, diagram, or common mistake.
 4. Prefer original questions generated from the PPT.
 5. If using web material, only use open or clearly attributable sources, paraphrase/adapt the question, and keep the source link.
+
+For adaptive review:
+
+1. Group wrong answers by slide and root cause.
+2. Recommend a short re-study order instead of telling students to reread everything.
+3. Turn each repeated error into a next-action rule.
+4. Preserve a fillable JSON template when no wrong-answer data is supplied.

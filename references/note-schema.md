@@ -85,3 +85,60 @@ Guidelines:
 - `detailed_explanation` should be high-density: define the concept, state conditions, explain why it works, show how to use it, and name the common mistake.
 - For formulas, include log base/unit/condition when relevant and at least one numeric mini-example.
 - For algorithms, include input, output, ordered steps, correctness intuition, and final-answer check.
+
+## Optional Adapter Schemas
+
+### OCR / math recognition JSON
+
+Pass with `--ocr-json`:
+
+```json
+{
+  "slides": [
+    {
+      "number": 1,
+      "text": ["OCR text"],
+      "formula_candidates": ["H(X)=-\\sum_x p(x)\\log p(x)"],
+      "visual_explanation": "Optional visual note from OCR/VLM."
+    }
+  ]
+}
+```
+
+### Practice bank JSON
+
+Pass with `--practice-bank-json`:
+
+```json
+{
+  "questions": [
+    {
+      "terms": ["entropy", "source coding"],
+      "question": "Short adapted exercise.",
+      "answer": "Final answer.",
+      "solution": "Step-by-step solution.",
+      "difficulty": "基础",
+      "source": "Open/self-owned source",
+      "source_url": "https://example.edu"
+    }
+  ]
+}
+```
+
+### Wrong-answer JSON
+
+Pass with `--wrong-answers-json`:
+
+```json
+{
+  "missed": [
+    {
+      "slide": 1,
+      "question": "Question text",
+      "your_answer": "Student answer",
+      "root_cause": "公式不会用",
+      "note": "What went wrong"
+    }
+  ]
+}
+```
