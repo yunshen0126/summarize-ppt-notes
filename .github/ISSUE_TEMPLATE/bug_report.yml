@@ -1,0 +1,24 @@
+name: Bug report
+description: Report a reproducible extraction or DOCX generation problem.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command
+      description: Paste the command you ran. Remove private file paths if needed.
+      render: bash
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Python version, OS, LibreOffice availability, and `scripts/doctor.py` output.
+

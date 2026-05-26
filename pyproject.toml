@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "summarize-ppt-notes"
+version = "0.4.0"
+description = "Codex Skill and CLI for turning slide decks into detailed Word study notes."
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+authors = [{ name = "Yunshen" }]
+keywords = ["codex-skill", "powerpoint", "pptx", "docx", "study-notes", "slides"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Education",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Topic :: Office/Business :: Office Suites",
+  "Topic :: Text Processing :: Markup",
+]
+dependencies = []
+
+[project.optional-dependencies]
+render = ["PyMuPDF>=1.24", "Pillow>=10"]
+dev = ["PyYAML>=6", "pytest>=8"]
+
+[project.scripts]
+ppt-notes-exporter = "ppt_notes_summarizer.cli:main"
+ppt-notes-doctor = "ppt_notes_summarizer.doctor:main"
+
+[tool.setuptools]
+packages = ["ppt_notes_summarizer", "scripts"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,59 @@
+{
+  "language": "zh",
+  "slides": [
+    {
+      "number": 1,
+      "title": "均方误差损失函数",
+      "purpose": "这一页用于引入回归任务中最常见的误差度量方法。",
+      "what_it_says": "页面给出 MSE 的定义，说明它通过计算真实值和预测值之间差值的平方平均来衡量模型误差。",
+      "detailed_explanation": "先对每个样本计算预测误差，再平方以消除正负抵消并放大较大误差，最后除以样本数量得到平均损失。MSE 越小，表示模型预测越接近真实值。",
+      "visual_explanation": "如果页面包含误差曲线或点线图，需要说明横轴、纵轴、真实值、预测值以及误差距离的含义。",
+      "formula_explanations": [
+        {
+          "formula": "MSE = \\frac{1}{n}\\sum_{i=1}^{n}(y_i-\\hat{y}_i)^2",
+          "meaning": "n 是样本数，y_i 是第 i 个样本的真实值，\\hat{y}_i 是模型预测值。",
+          "conditions": "常用于连续数值预测问题，例如房价、温度、销量等回归任务。",
+          "example": "真实值为 3 和 5，预测值为 2 和 7，则 MSE=((3-2)^2+(5-7)^2)/2=(1+4)/2=2.5。"
+        }
+      ],
+      "worked_examples": [
+        "给定两条样本，逐项计算误差平方后求平均，即可得到模型在这批样本上的平均损失。"
+      ],
+      "exam_focus": "常见考法是给出一组真实值和预测值，要求计算 MSE，或解释为什么平方误差会放大大偏差。",
+      "key_takeaways": [
+        "MSE 是平均平方误差，越小表示预测越接近真实值。",
+        "平方可以避免正负误差抵消，同时放大较大的误差。"
+      ],
+      "memory_hooks": [
+        "差值 -> 平方 -> 求和 -> 平均。"
+      ],
+      "likely_questions": [
+        {
+          "question": "给定真实值 3、5，预测值 2、7，计算 MSE。",
+          "answer": "MSE=((3-2)^2+(5-7)^2)/2=(1+4)/2=2.5。"
+        },
+        {
+          "question": "为什么 MSE 对异常大误差更敏感？",
+          "answer": "因为误差被平方，大误差会被放大。"
+        }
+      ],
+      "common_mistakes": [
+        "忘记除以样本数 n。",
+        "把预测值和真实值差的符号当成最终结果，忽略平方。"
+      ],
+      "prerequisites": [
+        "平方运算",
+        "平均值",
+        "回归预测误差"
+      ],
+      "difficulty": "基础",
+      "estimated_review_minutes": "6",
+      "tags": [
+        "machine-learning",
+        "loss-function",
+        "mse"
+      ],
+      "uncertainties": []
+    }
+  ]
+}
