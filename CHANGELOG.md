@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.0
+
+- Add `learning_path.md`, a teacher-style chapter route with module goals, must-read slides, self-test checkpoints, and common traps.
+- Surface `00_学习路径.md` first in the clean deliverables folder and `START_HERE.md`.
+- Update study-pack dashboard and cram plan to start from the learning path before detailed reading.
+
 ## 0.6.0
 
 - Add teacher output profile with a clean `*_deliverables/START_HERE.md` entry point.

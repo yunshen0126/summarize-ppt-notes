@@ -36,7 +36,7 @@ WORD_NS = {
     "pic": "http://schemas.openxmlformats.org/drawingml/2006/picture",
 }
 
-VERSION = "0.6.0"
+VERSION = "0.7.0"
 
 BANNED_FLUFF_PATTERNS = [
     r"放回.*主线.*理解",
@@ -62,6 +62,89 @@ STYLE_COLORS = {
     "red": "B91C1C",
     "red_bg": "FEF2F2",
     "slate_bg": "F8FAFC",
+}
+
+TOPIC_STOPWORDS = {
+    "slide",
+    "slides",
+    "page",
+    "pages",
+    "lecture",
+    "chapter",
+    "part",
+    "section",
+    "example",
+    "examples",
+    "exercise",
+    "exercises",
+    "homework",
+    "summary",
+    "note",
+    "notes",
+    "the",
+    "and",
+    "for",
+    "with",
+    "from",
+    "into",
+    "onto",
+    "about",
+    "between",
+    "of",
+    "to",
+    "in",
+    "on",
+    "by",
+    "vs",
+    "problem",
+    "proof",
+    "definition",
+    "theorem",
+    "题目",
+    "练习",
+    "习题",
+    "总结",
+    "定义",
+    "定理",
+    "证明",
+    "概念",
+    "方法",
+    "问题",
+    "引言",
+    "复习",
+    "页面",
+    "章节",
+    "课程",
+    "讲义",
+    "材料",
+    "内容",
+    "学习",
+}
+
+CONNECTOR_HINTS = {
+    "example",
+    "examples",
+    "exercise",
+    "exercises",
+    "homework",
+    "练习",
+    "习题",
+    "例题",
+    "作业",
+    "总结",
+    "回顾",
+    "review",
+    "summary",
+}
+
+ROLE_LABELS = {
+    "concept": "概念",
+    "formula": "公式/推导",
+    "algorithm": "方法/算法",
+    "example": "例题/案例",
+    "practice": "练习",
+    "summary": "总结",
+    "visual": "图表理解",
 }
 
 
@@ -1600,6 +1683,360 @@ def slide_tags(note: Dict[str, Any], slide: Dict[str, Any]) -> str:
     return " ".join(dict.fromkeys(tags))
 
 
+def clamp_text(value: Any, limit: int = 120) -> str:
+    text = plain(value)
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1].rstrip() + "..."
+
+
+def normalize_topic_term(term: Any) -> str:
+    text = plain(term).strip(" -_:/：,，.。;；|[]()（）{}<>")
+    if not text:
+        return ""
+    text = re.sub(r"\s+", " ", text)
+    lower = text.lower()
+    if lower in TOPIC_STOPWORDS or text in TOPIC_STOPWORDS:
+        return ""
+    if lower.startswith("slide_"):
+        return ""
+    if text.isdigit() or len(text) < 2:
+        return ""
+    if re.fullmatch(r"[A-Za-z]{2}", text) and not text.isupper():
+        return ""
+    if len(text) > 24:
+        return ""
+    return text
+
+
+def topic_terms_from_text(value: Any, limit: int = 8) -> List[str]:
+    text = plain(value)
+    if not text:
+        return []
+    terms: List[str] = []
+    for raw in re.findall(r"[A-Za-z][A-Za-z0-9_+\-/]{1,23}", text):
+        term = normalize_topic_term(raw)
+        if term:
+            terms.append(term)
+    chunks = re.split(r"[\s,，。；;:：、/|()[\]{}<>《》]+", text)
+    for chunk in chunks:
+        if not re.fullmatch(r"[\u4e00-\u9fffA-Za-z0-9_-]{2,24}", chunk or ""):
+            continue
+        term = normalize_topic_term(chunk)
+        if term and not re.fullmatch(r"[A-Za-z0-9_+\-/]+", term):
+            terms.append(term)
+    return unique_preserve(terms)[:limit]
+
+
+def extract_topic_terms(note: Dict[str, Any], slide: Dict[str, Any], limit: int = 8) -> List[str]:
+    terms: List[str] = []
+    for tag in as_list(note_field(note, "tags")):
+        term = normalize_topic_term(tag)
+        if term:
+            terms.append(term)
+    for value in [
+        note_field(note, "title"),
+        slide.get("title", ""),
+        note_field(note, "exam_focus"),
+        note_field(note, "key_takeaways"),
+        note_field(note, "prerequisites"),
+    ]:
+        terms.extend(topic_terms_from_text(value, limit=4))
+    for value in (slide.get("formula_candidates") or [])[:3]:
+        terms.extend(topic_terms_from_text(value, limit=2))
+    for value in (slide.get("text") or [])[:3]:
+        terms.extend(topic_terms_from_text(value, limit=3))
+    return unique_preserve(terms)[:limit]
+
+
+def slide_has_extracted_visual(slide: Dict[str, Any]) -> bool:
+    return bool(slide.get("images") or slide.get("related_objects") or slide.get("tables") or slide.get("alt_texts"))
+
+
+def infer_slide_role(note: Dict[str, Any], slide: Dict[str, Any]) -> str:
+    text = plain(
+        [
+            note_field(note, "title"),
+            slide.get("title", ""),
+            note_field(note, "purpose"),
+            note_field(note, "what_it_says", "summary"),
+            note_field(note, "exam_focus"),
+            slide.get("text") or [],
+        ]
+    )
+    lower = text.lower()
+    if any(word in lower for word in ("练习", "习题", "作业", "quiz", "exercise", "homework")):
+        return "practice"
+    if any(word in lower for word in ("例题", "案例", "example", "case study")):
+        return "example"
+    if any(word in lower for word in ("总结", "回顾", "小结", "summary", "review")):
+        return "summary"
+    if any(word in lower for word in ("algorithm", "算法", "步骤", "流程", "procedure", "迭代", "递归", "贪心")):
+        return "algorithm"
+    if slide_has_formula(slide) or note_field(note, "formula_explanations", "formulas"):
+        return "formula"
+    if slide_has_extracted_visual(slide):
+        return "visual"
+    return "concept"
+
+
+def parse_review_minutes(note: Dict[str, Any], slide: Dict[str, Any]) -> int:
+    raw = plain(note_field(note, "estimated_review_minutes"))
+    match = re.search(r"\d+", raw)
+    if match:
+        return max(3, min(int(match.group(0)), 45))
+    difficulty = plain(note_field(note, "difficulty"))
+    if "困难" in difficulty or difficulty.lower() in {"hard", "difficult"}:
+        return 12
+    if slide_has_formula(slide):
+        return 10
+    if slide_has_extracted_visual(slide):
+        return 8
+    return 6
+
+
+def slide_difficulty_label(note: Dict[str, Any], slide: Dict[str, Any]) -> str:
+    difficulty = plain(note_field(note, "difficulty"))
+    if difficulty:
+        return difficulty
+    if slide_has_formula(slide):
+        return "困难"
+    if slide_has_extracted_visual(slide):
+        return "中等"
+    return "基础"
+
+
+def is_section_break_title(title: str) -> bool:
+    text = plain(title)
+    if not text:
+        return False
+    lower = text.lower()
+    if any(word in lower for word in ("chapter", "section", "module", "unit", "part ")):
+        return True
+    return bool(re.search(r"(第\s*[一二三四五六七八九十0-9]+\s*[章节部分讲]|^目录$|^大纲$|^outline$)", text))
+
+
+def term_overlap_score(left: List[str], right: List[str]) -> float:
+    left_set = {item.lower() for item in left if item}
+    right_set = {item.lower() for item in right if item}
+    if not left_set or not right_set:
+        return 0.0
+    return len(left_set & right_set) / max(len(left_set | right_set), 1)
+
+
+def slide_span(numbers: List[int]) -> str:
+    if not numbers:
+        return "无"
+    spans: List[str] = []
+    start = prev = numbers[0]
+    for number in numbers[1:]:
+        if number == prev + 1:
+            prev = number
+            continue
+        spans.append(f"S{start}" if start == prev else f"S{start}-S{prev}")
+        start = prev = number
+    spans.append(f"S{start}" if start == prev else f"S{start}-S{prev}")
+    return ", ".join(spans)
+
+
+def choose_module_title(items: List[Dict[str, Any]], module_index: int) -> str:
+    term_counts: Dict[str, int] = {}
+    for item in items:
+        for term in item["terms"][:5]:
+            term_counts[term] = term_counts.get(term, 0) + 1
+    ranked_terms = sorted(term_counts.items(), key=lambda pair: (-pair[1], len(pair[0]), pair[0]))
+    if ranked_terms:
+        return "、".join(term for term, _ in ranked_terms[:2])
+    first_title = plain(items[0].get("title"))
+    if first_title:
+        return clamp_text(first_title, 28)
+    return f"模块 {module_index}"
+
+
+def collect_module_items(items: List[Dict[str, Any]], field: str, limit: int = 3) -> List[str]:
+    collected: List[str] = []
+    for item in items:
+        for value in as_list(note_field(item["note"], field)):
+            text = clamp_text(value, 140)
+            if text:
+                collected.append(f"S{item['number']}: {text}")
+    return unique_preserve(collected)[:limit]
+
+
+def collect_module_questions(items: List[Dict[str, Any]], limit: int = 3) -> List[str]:
+    questions: List[str] = []
+    for item in items:
+        for question in as_list(note_field(item["note"], "likely_questions")):
+            if isinstance(question, dict):
+                text = question.get("question") or question.get("front") or ""
+            else:
+                text = question
+            text = clamp_text(text, 120)
+            if text:
+                questions.append(f"S{item['number']}: {text}")
+    return unique_preserve(questions)[:limit]
+
+
+def focus_reason(item: Dict[str, Any]) -> str:
+    reasons: List[str] = []
+    if slide_has_formula(item["slide"]) or note_field(item["note"], "formula_explanations", "formulas"):
+        reasons.append("公式/推导")
+    if slide_has_extracted_visual(item["slide"]):
+        reasons.append("图表/素材")
+    difficulty = slide_difficulty_label(item["note"], item["slide"])
+    if "困难" in difficulty or difficulty.lower() in {"hard", "difficult"}:
+        reasons.append("高难度")
+    if note_field(item["note"], "exam_focus"):
+        reasons.append("有明确考点")
+    return "、".join(reasons[:3]) or ROLE_LABELS.get(item["role"], item["role"])
+
+
+def summarize_learning_module(items: List[Dict[str, Any]], module_index: int) -> Dict[str, Any]:
+    numbers = [item["number"] for item in items]
+    roles = unique_preserve([ROLE_LABELS.get(item["role"], item["role"]) for item in items])
+    all_terms = unique_preserve([term for item in items for term in item["terms"]])
+    focus_items = [
+        item
+        for item in items
+        if slide_has_formula(item["slide"])
+        or slide_has_extracted_visual(item["slide"])
+        or "困难" in slide_difficulty_label(item["note"], item["slide"])
+        or note_field(item["note"], "exam_focus")
+    ]
+    if not focus_items and items:
+        focus_items = [items[0]]
+    title = choose_module_title(items, module_index)
+    topic = "、".join(all_terms[:4]) or title
+    goal = f"理解 {topic}，能说明这些页面如何从{roles[0] if roles else '概念'}推进到考点应用。"
+    exam_focuses = collect_module_items(items, "exam_focus", limit=2)
+    if exam_focuses:
+        goal = clamp_text(exam_focuses[0], 160)
+    checkpoints = collect_module_questions(items, limit=3)
+    if not checkpoints:
+        checkpoints = [f"闭卷说出 {topic} 的定义、适用条件和一个典型考法。"]
+    traps = collect_module_items(items, "common_mistakes", limit=3)
+    if not traps:
+        traps = [f"不要只记 {topic} 的结论；要能说出条件、变量或图表读法。"]
+    prerequisites = collect_module_items(items, "prerequisites", limit=3)
+    return {
+        "index": module_index,
+        "title": title,
+        "slides": numbers,
+        "roles": roles,
+        "terms": all_terms[:6],
+        "minutes": sum(parse_review_minutes(item["note"], item["slide"]) for item in items),
+        "goal": goal,
+        "focus": [(item["number"], focus_reason(item)) for item in focus_items[:4]],
+        "checkpoints": checkpoints,
+        "traps": traps,
+        "prerequisites": prerequisites,
+    }
+
+
+def build_learning_modules(extraction: Dict[str, Any], notes: Dict[int, Dict[str, Any]]) -> List[Dict[str, Any]]:
+    prepared: List[Dict[str, Any]] = []
+    for slide in extraction.get("slides", []):
+        number = int(slide.get("number", 0) or 0)
+        note = notes.get(number, {})
+        prepared.append(
+            {
+                "number": number,
+                "title": note_field(note, "title") or slide.get("title") or f"Slide {number}",
+                "terms": extract_topic_terms(note, slide),
+                "role": infer_slide_role(note, slide),
+                "note": note,
+                "slide": slide,
+            }
+        )
+    modules: List[Dict[str, Any]] = []
+    current: List[Dict[str, Any]] = []
+    current_terms: List[str] = []
+    for item in prepared:
+        start_new = False
+        if current:
+            overlap = term_overlap_score(current_terms, item["terms"])
+            if is_section_break_title(item["title"]) and len(current) >= 2:
+                start_new = True
+            elif len(current) >= 7:
+                start_new = True
+            elif len(current) >= 4 and item["role"] in {"concept", "formula"} and overlap < 0.08:
+                start_new = True
+        if start_new:
+            modules.append(summarize_learning_module(current, len(modules) + 1))
+            current = []
+            current_terms = []
+        current.append(item)
+        current_terms = unique_preserve(current_terms + item["terms"])
+    if current:
+        modules.append(summarize_learning_module(current, len(modules) + 1))
+    return modules
+
+
+def write_learning_path(extraction: Dict[str, Any], notes: Dict[int, Dict[str, Any]], output: Path) -> None:
+    modules = build_learning_modules(extraction, notes)
+    total_minutes = sum(int(module.get("minutes", 0) or 0) for module in modules)
+    total_time = f"{total_minutes} 分钟" if total_minutes else "未估算"
+    lines = [
+        "# 学习路径",
+        "",
+        "这份文件负责回答“先学什么、为什么、学到什么程度再往后走”。它不重复完整讲义，只给复习顺序和通关标准。",
+        "",
+        "## 先学路径",
+        "",
+    ]
+    if not modules:
+        lines.append("- 未检测到页面。")
+    for module in modules:
+        terms = "、".join(module["terms"][:4]) or module["title"]
+        lines.append(f"{module['index']}. **{module['title']}** ({slide_span(module['slides'])}, 约 {module['minutes']} 分钟): {terms}")
+    lines += [
+        "",
+        f"- 模块数: {len(modules)}",
+        f"- 预计首轮理解时间: {total_time}",
+        "- 用法: 先按下面每个模块过一遍，再打开完整讲义补细节，最后做主动回忆题。",
+        "",
+    ]
+    for module in modules:
+        focus = "；".join(f"S{number}({reason})" for number, reason in module["focus"]) or slide_span(module["slides"])
+        role_text = " -> ".join(module["roles"]) or "概念"
+        lines += [
+            f"## {module['index']}. {module['title']}",
+            "",
+            f"- **覆盖页面**: {slide_span(module['slides'])}",
+            f"- **课堂角色**: {role_text}",
+            f"- **学习目标**: {module['goal']}",
+        ]
+        if module["prerequisites"]:
+            lines.append(f"- **先补前置**: {'；'.join(module['prerequisites'])}")
+        lines += [
+            f"- **必看页**: {focus}",
+            "- **学习动作**:",
+            "  1. 先看本模块标题和必看页截图，判断它在讲定义、公式、方法还是例题。",
+            "  2. 再读 `01_复习讲义.docx` 对应页面，只摘条件、变量、图表结论和常见错误。",
+            "  3. 合上讲义，用下面的通关题闭卷回答。",
+            "- **自测通过线**:",
+        ]
+        for checkpoint in module["checkpoints"]:
+            lines.append(f"  - {checkpoint}")
+        lines.append("- **常见卡点**:")
+        for trap in module["traps"]:
+            lines.append(f"  - {trap}")
+        lines += [
+            "- **进入下一模块前**: 能用自己的话讲清本模块解决什么问题、哪些条件不能漏、遇到题目先看哪个信号。",
+            "",
+        ]
+    lines += [
+        "## 复习分流",
+        "",
+        "- 时间少: 只看每个模块的必看页，再做主动回忆题。",
+        "- 公式多: 先走本路径，再集中打开 `05_公式速查.md` 手算例题。",
+        "- 图表多: 每个图都要说出轴、箭头、区域或表头分别代表什么。",
+        "- 考前最后一遍: 只看本路径的自测通过线、`03_一页纸总览.md` 和错题本。",
+        "",
+    ]
+    output.write_text("\n".join(lines), encoding="utf-8")
+
+
 def csv_rows_to_text(rows: List[List[str]]) -> str:
     buffer = io.StringIO()
     writer = csv.writer(buffer)
@@ -1746,7 +2183,7 @@ def write_cram_plan(
         "",
         "## Daily Loop",
         "",
-        "1. 先看 `one_page_review.md` 建立全局框架。",
+        "1. 先看 `learning_path.md`，按模块确定今天学哪几页。",
         "2. 用 `active_recall_questions.md` 闭卷回答，答不出就回看对应页。",
         "3. 复习 `formula_sheet.md`，每个公式至少手算一个例子。",
         "4. 用 `mistake_log_template.md` 记录错因，而不是只记录答案。",
@@ -1873,6 +2310,7 @@ def write_study_dashboard(extraction: Dict[str, Any], notes: Dict[int, Dict[str,
         "",
         "## Files",
         "",
+        f"- [{(study_dir / 'learning_path.md').name}](learning_path.md)",
         f"- [{(study_dir / 'exam_cram_plan.md').name}](exam_cram_plan.md)",
         f"- [{(study_dir / 'one_page_review.md').name}](one_page_review.md)",
         f"- [{(study_dir / 'active_recall_questions.md').name}](active_recall_questions.md)",
@@ -1884,11 +2322,12 @@ def write_study_dashboard(extraction: Dict[str, Any], notes: Dict[int, Dict[str,
         "",
         "## How To Use",
         "",
-        "1. Start with one-page review.",
-        "2. Answer active recall questions without opening the slides.",
-        "3. Import `flashcards_anki.csv` into Anki or review `flashcards.md` manually.",
-        "4. Rework every formula from `formula_sheet.md` with a small example.",
-        "5. Put every wrong answer into the mistake log and revisit it the next day.",
+        "1. Start with `learning_path.md` to follow the chapter-style order.",
+        "2. Read the handout pages for the current module only.",
+        "3. Answer active recall questions without opening the slides.",
+        "4. Import `flashcards_anki.csv` into Anki or review `flashcards.md` manually.",
+        "5. Rework every formula from `formula_sheet.md` with a small example.",
+        "6. Put every wrong answer into the mistake log and revisit it the next day.",
     ]
     output.write_text("\n".join(lines), encoding="utf-8")
 
@@ -1902,6 +2341,7 @@ def write_study_pack(
     target_score: Optional[str],
 ) -> None:
     study_dir.mkdir(parents=True, exist_ok=True)
+    write_learning_path(extraction, notes, study_dir / "learning_path.md")
     write_study_dashboard(extraction, notes, study_dir / "README.md", study_dir)
     write_cram_plan(extraction, notes, study_dir / "exam_cram_plan.md", exam_date, daily_minutes, target_score)
     write_one_page_review(extraction, notes, study_dir / "one_page_review.md")
@@ -1951,6 +2391,7 @@ def write_start_here(
 
     if study_pack_dir and study_pack_dir.exists():
         mapping = [
+            ("path", "learning_path.md", "00_学习路径.md"),
             ("overview", "one_page_review.md", "03_一页纸总览.md"),
             ("recall", "active_recall_questions.md", "04_主动回忆题.md"),
             ("formula", "formula_sheet.md", "05_公式速查.md"),
@@ -1988,12 +2429,12 @@ def write_start_here(
             "",
         ]
     lines += [
-        "## 你只需要先看这 4 个",
+        "## 先看这 4 个",
         "",
     ]
     priority = [
-        ("1. 复习讲义", "handout", "按页阅读，包含截图、考点、深度讲解、公式例题和常见错误。"),
-        ("2. 一页纸总览", "overview", "考试前快速过全局重点。"),
+        ("1. 学习路径", "path", "按老师讲课顺序看，知道每一章先学什么、为什么学、学到什么程度。"),
+        ("2. 复习讲义", "handout", "按学习路径指定的页面阅读，包含截图、考点、深度讲解、公式例题和常见错误。"),
         ("3. 主动回忆题", "recall", "闭卷答题。答不出来再回看讲义。"),
         ("4. 公式速查", "formula", "只复习公式、变量、条件和例题。"),
     ]
@@ -2008,6 +2449,7 @@ def write_start_here(
         "",
     ]
     optional = [
+        ("一页纸总览", "overview", "考前快速过全局重点。"),
         ("Anki 卡片", "anki", "导入 Anki 做间隔复习。"),
         ("错题本模板", "mistakes", "把不会的题、错因和复盘写进去。"),
         ("冲刺计划", "plan", "临近期末时按天安排。"),
@@ -2027,10 +2469,11 @@ def write_start_here(
         "",
         "## 推荐复习顺序",
         "",
-        "1. 读 `01_复习讲义.docx`，每页只抓“考点定位、深度讲解、公式例题、常见错误”。",
-        "2. 合上讲义，做 `04_主动回忆题.md`。",
-        "3. 错题写入 `06_错题本模板.md`。",
-        "4. 考前只看 `03_一页纸总览.md`、`05_公式速查.md` 和错题本。",
+        "1. 读 `00_学习路径.md`，按模块决定今天看哪些页。",
+        "2. 打开 `01_复习讲义.docx`，只读当前模块对应页面。",
+        "3. 合上讲义，做 `04_主动回忆题.md`。",
+        "4. 错题写入 `06_错题本模板.md`。",
+        "5. 考前只看 `03_一页纸总览.md`、`05_公式速查.md` 和错题本。",
         "",
     ]
     start = deliverables_dir / "START_HERE.md"

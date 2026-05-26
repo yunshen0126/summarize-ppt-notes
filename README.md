@@ -22,7 +22,7 @@ Most PPT summarizers stop at short bullet summaries. This project targets seriou
 - Extracts PowerPoint XML text, speaker notes, tables, images, chart/diagram relationships, and formula-like expressions
 - Generates `extraction.json`, `notes_template.json`, `extraction.md`, `quality_report.json`, and `quality_report.md`
 - Generates final notes as Markdown plus an LLM/VLM prompt pack for review workflows
-- Generates a final-exam study pack: cram plan, active-recall questions, formula sheet, Anki CSV, mistake-log template, one-page review, and Mermaid concept map
+- Generates a final-exam study pack: teacher-style learning path, cram plan, active-recall questions, formula sheet, Anki CSV, mistake-log template, one-page review, and Mermaid concept map
 - Builds a Word `.docx` with slide screenshots and structured notes
 - Can run as a Codex Skill or as a standalone CLI
 - Works offline for extraction; no source files are uploaded by the scripts
@@ -115,6 +115,7 @@ The default teacher profile creates a clean `*_deliverables/` folder. Open this 
 ```text
 *_deliverables/
 ├── START_HERE.md
+├── 00_学习路径.md
 ├── 01_复习讲义.docx
 ├── 02_完整讲义.md
 ├── 03_一页纸总览.md
@@ -124,13 +125,14 @@ The default teacher profile creates a clean `*_deliverables/` folder. Open this 
 └── 可选_Anki卡片.csv
 ```
 
-Students should start from `START_HERE.md`. The work directory contains debug files and should not be the first thing a learner opens.
+Students should start from `START_HERE.md`, then `00_学习路径.md`. The learning path groups adjacent slides into chapter-style modules, names the must-read slides, and gives a self-test standard before moving on. The work directory contains debug files and should not be the first thing a learner opens.
 
 ## Final-Exam Study Pack
 
 The generated `study_pack/` folder is designed for students who need to convert lecture slides into an actual review loop:
 
 - `README.md`: dashboard and file map
+- `learning_path.md`: chapter-style route through the deck, with goals, must-read slides, checkpoints, and common traps
 - `exam_cram_plan.md`: day-by-day review plan
 - `one_page_review.md`: high-yield summary
 - `active_recall_questions.md` and `.json`: closed-book self-test questions

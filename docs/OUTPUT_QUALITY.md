@@ -11,6 +11,7 @@ Good notes are:
 - operational: they show how to solve a question or check an answer
 - compact: they remove generic transitions and empty advice
 - exam-aware: they name likely question types and common mistakes
+- guided: they tell students which module to study first, which slides are must-read, and when they are ready to move on
 
 ## Bad Notes
 
@@ -48,3 +49,10 @@ For a chart or diagram:
 2. Explain what changes and what stays fixed.
 3. State the conclusion the slide wants the student to learn.
 
+For a learning path:
+
+1. Group adjacent slides into chapter-like modules.
+2. Name the learning goal and must-read slides.
+3. Give closed-book checkpoints.
+4. State common traps.
+5. Avoid duplicating the full notes.
