@@ -25,6 +25,7 @@
 - 每页保留原始截图，方便核对公式、图片和图表
 - 提取 PPT 文字、备注、表格、图片、图表关系和公式候选
 - Word 中使用真正的 Office Math / OMML 公式对象，而不是只显示 LaTeX 源码
+- 默认压缩标题页、目录页、章节过渡页和结束页，只把正文学习页写进讲义、题目、学习路径和 prompt，减少无效输出与 token 消耗
 - 生成逐页讲解：这一页干什么、讲了什么、复杂内容详解、图表解释、公式说明、例题
 - 自动生成 `00_学习路径.md`，按老师讲课思路组织章节式学习路线
 - 自动生成 `07_小题练习.md`，包含题目、答案、解题思路、难度和来源说明
@@ -65,6 +66,26 @@ PPT学习笔记_work/
 ├── prompt_pack.md
 ├── quality_report.json
 └── quality_report.md
+```
+
+## 默认省 token：只展开真正学习页
+
+默认 `--content-filter study` 会自动识别并压缩低价值导航页：
+
+- 标题/封面页
+- 目录、大纲、Agenda、Outline
+- 章节过渡页
+- Thank you / Q&A 等结束页
+
+这些页面仍会保留在 `extraction.json`，但不会进入完整讲义、学习路径、练习题、公式表、Anki 卡片和 prompt pack。这样可以避免把“标题页也讲一大段”，也能减少后续让模型填讲解时的 token。
+
+如果你确实要逐页全量审计，可以加：
+
+```bash
+python3 scripts/ppt_notes_exporter.py "slides.pptx" \
+  --content-filter all \
+  --layout audit \
+  --output "PPT全量审计.docx"
 ```
 
 把 `notes_template.json` 填成高质量逐页讲解后，重新生成最终版：
@@ -232,6 +253,7 @@ Use $summarize-ppt-notes to turn this PPT into final-exam review notes.
 python3 scripts/ppt_notes_exporter.py "slides.pptx" \
   --slides 1,3-5 \
   --max-slides 10 \
+  --content-filter study \
   --dpi 180 \
   --output notes.docx \
   --workdir notes_work \
@@ -248,6 +270,8 @@ python3 scripts/ppt_notes_exporter.py "slides.pptx" \
 - `--no-render`：跳过截图渲染，适合快速 XML 提取
 - `--slides 1,3-5`：只处理指定页
 - `--max-slides 10`：只处理前 10 页
+- `--content-filter study`：默认，压缩标题、目录、章节过渡和结束页，只展开正文学习页
+- `--content-filter all`：全量逐页输出，适合审计或需要保留目录页讲解的场景
 - `--notes-json`：传入填好的逐页讲解
 - `--ocr-json`：合并外部 OCR / 公式识别结果
 - `--practice-bank-json`：接入开放题库或自建题库

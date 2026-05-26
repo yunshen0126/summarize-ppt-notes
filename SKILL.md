@@ -1,13 +1,15 @@
 ---
 name: summarize-ppt-notes
-description: Create detailed Word/Markdown/HTML study notes and final-exam review packs from PowerPoint decks or slide PDFs, including full-slide screenshots, extracted text, real Word Office Math equations, formulas, tables, images, charts, per-slide explanations, teacher-style chapter learning paths, active-recall questions, small practice exercises with answers/solution steps, adaptive wrong-answer review paths, OCR/math-recognition JSON merge, practice-bank JSON matching, formula sheets, Anki flashcards, mistake-log templates, cram plans, and concept maps. Use when asked to summarize PPT/PPTX/PDF courseware, lecture slides, presentation notes, formulas, diagrams, or generate Chinese期末复习 materials that explain what each slide is for, what it says, complex content, what to learn first, likely exam questions, common mistakes, and worked examples for complex formulas.
+description: Create detailed Word/Markdown/HTML study notes and final-exam review packs from PowerPoint decks or slide PDFs, including full-slide screenshots, extracted text, real Word Office Math equations, formulas, tables, images, charts, content-slide explanations, token-saving title/agenda/section slide compacting, teacher-style chapter learning paths, active-recall questions, small practice exercises with answers/solution steps, adaptive wrong-answer review paths, OCR/math-recognition JSON merge, practice-bank JSON matching, formula sheets, Anki flashcards, mistake-log templates, cram plans, and concept maps. Use when asked to summarize PPT/PPTX/PDF courseware, lecture slides, presentation notes, formulas, diagrams, or generate Chinese期末复习 materials that explain what each slide is for, what it says, complex content, what to learn first, likely exam questions, common mistakes, and worked examples for complex formulas.
 ---
 
 # Summarize PPT Notes
 
 ## Overview
 
-Use this skill to turn a slide deck (`.pptx`, `.ppt`, or slide `.pdf`) into a Word/Markdown/HTML study-notes document and a final-exam review pack. The expected output is not a brief summary and not generic filler: produce page-by-page notes with the original slide screenshot, complete extracted content, image/chart descriptions, real Word Office Math equations, formula recognition, teaching-style explanations, a chapter-style learning path, likely exam questions, small practice exercises, wrong-answer feedback, common mistakes, memory hooks, and active-recall materials.
+Use this skill to turn a slide deck (`.pptx`, `.ppt`, or slide `.pdf`) into a Word/Markdown/HTML study-notes document and a final-exam review pack. The expected output is not a brief summary and not generic filler: produce deep notes for real content slides with the original slide screenshot, complete extracted content, image/chart descriptions, real Word Office Math equations, formula recognition, teaching-style explanations, a chapter-style learning path, likely exam questions, small practice exercises, wrong-answer feedback, common mistakes, memory hooks, and active-recall materials.
+
+By default, compact low-value navigation slides instead of expanding them into full notes: title/cover pages, agenda/table-of-contents pages, section dividers, and closing/Q&A pages. They stay in `extraction.json` for traceability, but should not consume Word pages, practice questions, learning-path modules, flashcards, or prompt budget. Use `--content-filter all` only when the user explicitly needs full per-slide audit output.
 
 Chinese is the default output language unless the user asks otherwise.
 
@@ -21,8 +23,8 @@ Chinese is the default output language unless the user asks otherwise.
    python3 /path/to/summarize-ppt-notes/scripts/ppt_notes_exporter.py "/path/to/slides.pptx" --output "/path/to/PPT学习笔记.docx"
    ```
 
-4. Inspect the generated `extraction.json`, `prompt_pack.md`, `quality_report.md`, `notes_template.json`, and slide screenshots in the work directory. Do not rely only on XML text extraction; visually inspect screenshots to catch formulas rendered as images, charts, SmartArt, handwritten symbols, and text embedded in pictures.
-5. Fill a notes JSON file using the schema in `references/note-schema.md`. For every slide, write:
+4. Inspect the generated `extraction.json`, `prompt_pack.md`, `quality_report.md`, `notes_template.json`, and slide screenshots in the work directory. Check `skipped_navigation_slides`; title/agenda/section pages should usually be compacted, while formula/chart/example/exercise pages must stay included. Do not rely only on XML text extraction; visually inspect screenshots to catch formulas rendered as images, charts, SmartArt, handwritten symbols, and text embedded in pictures.
+5. Fill a notes JSON file using the schema in `references/note-schema.md`. For every included study slide, write:
    - `purpose`: this slide's role in the lecture/presentation.
    - `what_it_says`: a faithful explanation of the visible content.
    - `detailed_explanation`: deeper explanation for dense definitions, algorithms, diagrams, derivations, tables, or charts.
@@ -45,7 +47,7 @@ Chinese is the default output language unless the user asks otherwise.
 
 ## Slide Analysis Standard
 
-For each slide, cover the following:
+For each included study slide, cover the following:
 
 - **页面截图**: include the rendered full-slide image when available.
 - **原始内容**: preserve visible text, bullet points, tables, notes, formula candidates, and extracted images.
@@ -106,7 +108,8 @@ Before finalizing:
 - `07_小题练习.md` exists and contains question, answer, solution steps, difficulty, and source notes.
 - `08_学习页面.html` exists as a local review page with module navigation, slide notes, formulas, and collapsible practice answers.
 - `09_错题反馈路径.md` and `可选_错题输入模板.json` exist.
-- Slide count in the Word document matches the deck or PDF page count.
+- Word and study-pack slide counts match the included study-slide count; `extraction.json` still preserves the original deck/PDF page count.
+- Title, agenda, table-of-contents, section divider, and closing pages are compacted by default and not expanded into full explanations or practice questions unless the user requests `--content-filter all`.
 - Every slide has a screenshot or a documented reason why rendering failed.
 - No obvious formula, chart, table, or image is ignored.
 - Dense slides have real explanation, not just rephrasing.

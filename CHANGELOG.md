@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.0
+
+- Add default `--content-filter study` mode that compacts title, agenda/table-of-contents, section divider, and closing slides.
+- Keep compacted navigation slides in `extraction.json` while excluding them from notes templates, Word/Markdown study notes, prompt packs, learning paths, exercises, flashcards, formula sheets, HTML study pages, and quality scoring.
+- Add `--content-filter all` for full per-slide audit output and report skipped navigation slides in `START_HERE.md` and quality reports.
+
 ## 0.9.0
 
 - Rewrite README in Chinese with full usage for Word equations, OCR JSON, practice banks, adaptive review, HTML study page, and benchmarks.

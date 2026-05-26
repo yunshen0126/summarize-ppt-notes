@@ -38,7 +38,7 @@ WORD_NS = {
     "m": NS_M,
 }
 
-VERSION = "0.9.0"
+VERSION = "0.10.0"
 
 BANNED_FLUFF_PATTERNS = [
     r"放回.*主线.*理解",
@@ -122,6 +122,63 @@ TOPIC_STOPWORDS = {
     "内容",
     "学习",
 }
+
+NAVIGATION_CONTENT_KINDS = {"title", "agenda", "section", "closing"}
+
+AGENDA_MARKERS = (
+    "agenda",
+    "outline",
+    "contents",
+    "roadmap",
+    "overview",
+    "目录",
+    "大纲",
+    "提纲",
+    "本章内容",
+    "本讲内容",
+    "本节内容",
+    "主要内容",
+    "课程安排",
+    "学习目标",
+)
+
+TITLE_MARKERS = (
+    "lecture",
+    "chapter",
+    "chap.",
+    "course",
+    "presentation",
+    "slides",
+    "final review",
+    "期末复习",
+    "课程",
+    "讲义",
+    "课件",
+)
+
+CLOSING_MARKERS = (
+    "thank you",
+    "thanks",
+    "q&a",
+    "questions?",
+    "questions",
+    "谢谢",
+    "答疑",
+    "提问",
+)
+
+MATH_GLYPH_MARKERS = (
+    "\uf03d",  # Symbol-font equals in many converted PDFs.
+    "\uf0e5",  # Symbol-font summation.
+    "\uf0a3",
+    "\uf0b3",
+    "\uf02d",
+    "\uf02b",
+    "\uf0d7",
+    "\uf0f9",
+    "\uf0fa",
+    "\uf0fb",
+)
 
 CONNECTOR_HINTS = {
     "example",
@@ -814,6 +871,155 @@ def filter_extraction_slides(extraction: Dict[str, Any], selector: Optional[str]
     extraction["slide_count"] = len(slides)
 
 
+def slide_visible_text_items(slide: Dict[str, Any]) -> List[str]:
+    items: List[str] = []
+    for value in as_list(slide.get("title")) + as_list(slide.get("text")):
+        text = plain(value)
+        if text:
+            items.append(text)
+    return unique_preserve(items)
+
+
+def slide_has_formula_signal(slide: Dict[str, Any]) -> bool:
+    if slide.get("formulas"):
+        return True
+    visible_text = "\n".join(slide_visible_text_items(slide))
+    if any(marker in visible_text for marker in MATH_GLYPH_MARKERS):
+        return True
+    if any(token in visible_text for token in ("=", "≈", "≠", "≤", "≥", "\\frac", "\\sum", "\\int", "\\sqrt", "∑", "∫", "√")):
+        return True
+    if re.search(r"[A-Za-z0-9]\s*[\^_]\s*[A-Za-z0-9({]", visible_text):
+        return True
+    for candidate in as_list(slide.get("formula_candidates")):
+        text = plain(candidate)
+        if not text:
+            continue
+        if any(token in text for token in ("=", "≈", "≠", "≤", "≥", "\\frac", "\\sum", "\\int", "\\sqrt", "∑", "∫", "√")):
+            return True
+        if re.search(r"[A-Za-z0-9]\s*[\^_]\s*[A-Za-z0-9({]", text):
+            return True
+    return False
+
+
+def slide_has_structured_learning_signal(slide: Dict[str, Any]) -> bool:
+    return bool(
+        slide_has_formula_signal(slide)
+        or slide.get("tables")
+        or slide.get("related_objects")
+        or slide.get("ocr_visual_explanations")
+    )
+
+
+def text_has_any_marker(text: str, markers: Tuple[str, ...]) -> bool:
+    lower = text.lower()
+    return any(marker in lower for marker in markers)
+
+
+def is_agenda_like_slide(title: str, text: str, line_count: int, text_units: int) -> bool:
+    title_lower = title.lower()
+    text_lower = text.lower()
+    strong_title_markers = ("agenda", "outline", "contents", "roadmap", "目录", "大纲", "提纲", "本章内容", "本讲内容", "本节内容", "课程安排")
+    weak_title_markers = ("overview", "context", "主要内容", "学习目标")
+    if re.search(r"\b(lecture|chapter|chap\.?)\b", title_lower) and line_count >= 5 and text_units <= 150:
+        return True
+    if any(marker in title_lower for marker in strong_title_markers):
+        return text_units <= 120
+    if any(marker in title_lower for marker in weak_title_markers) and line_count >= 3:
+        return text_units <= 100
+    if any(marker in text_lower for marker in AGENDA_MARKERS) and line_count >= 3 and text_units <= 120:
+        return True
+    return False
+
+
+def is_cover_like_slide(number: int, title: str, text: str, line_count: int, text_units: int) -> bool:
+    if number <= 2 and line_count <= 5 and text_units <= 45:
+        return True
+    if line_count <= 4 and text_units <= 35 and text_has_any_marker(f"{title}\n{text}", TITLE_MARKERS):
+        return True
+    return False
+
+
+def is_section_like_slide(title: str, text: str, line_count: int, text_units: int) -> bool:
+    if is_section_break_title(title) and text_units <= 70:
+        return True
+    if re.search(r"^\s*(part|chapter|section|module|unit)\s+[\w\divx.-]+", title, re.I) and text_units <= 70:
+        return True
+    if re.search(r"^\s*第\s*[一二三四五六七八九十0-9]+\s*[章节部分讲]\b", title) and text_units <= 70:
+        return True
+    return line_count <= 2 and text_units <= 16
+
+
+def classify_slide_content(slide: Dict[str, Any]) -> Tuple[str, str]:
+    number = int(slide.get("number", 0) or 0)
+    title = plain(slide.get("title"))
+    visible_items = slide_visible_text_items(slide)
+    text = "\n".join(visible_items)
+    text_units = count_cjk_or_words(text)
+    line_count = len(visible_items)
+    lower = text.lower()
+    has_learning_signal = slide_has_structured_learning_signal(slide)
+
+    if any(word in lower for word in ("练习", "习题", "作业", "quiz", "exercise", "homework", "problem set")):
+        return "exercise", "练习/习题页保留为学习内容"
+    if any(word in lower for word in ("例题", "举例", "示例", "example", "case study")):
+        return "example", "例题/案例页保留为学习内容"
+    if has_learning_signal:
+        return "content", "包含公式、表格、图表或 OCR 视觉信息"
+    if not text:
+        return "content", "无结构化文字，保留截图供人工核对"
+    if is_agenda_like_slide(title, text, line_count, text_units):
+        return "agenda", "目录/大纲页默认压缩"
+    if text_has_any_marker(text, CLOSING_MARKERS) and text_units <= 30:
+        return "closing", "结束/答疑页默认压缩"
+    if number <= 2 and is_cover_like_slide(number, title, text, line_count, text_units):
+        return "title", "封面/标题页默认压缩"
+    if is_section_like_slide(title, text, line_count, text_units):
+        return "section", "章节过渡页默认压缩"
+    if is_cover_like_slide(number, title, text, line_count, text_units):
+        return "title", "封面/标题页默认压缩"
+    return "content", "正文学习页"
+
+
+def annotate_slide_kinds(extraction: Dict[str, Any], content_filter: str = "study") -> None:
+    if content_filter not in {"study", "all"}:
+        raise ValueError("--content-filter must be 'study' or 'all'")
+    skipped: List[Dict[str, Any]] = []
+    for slide in extraction.get("slides", []):
+        kind, reason = classify_slide_content(slide)
+        include = content_filter == "all" or kind not in NAVIGATION_CONTENT_KINDS
+        slide["content_kind"] = kind
+        slide["study_include"] = include
+        slide["study_skip_reason"] = "" if include else reason
+        if not include:
+            skipped.append(
+                {
+                    "number": slide.get("number"),
+                    "title": slide.get("title", ""),
+                    "content_kind": kind,
+                    "reason": reason,
+                }
+            )
+    extraction["content_filter"] = content_filter
+    extraction["study_slide_count"] = sum(1 for slide in extraction.get("slides", []) if slide.get("study_include", True))
+    extraction["skipped_navigation_slide_count"] = len(skipped)
+    extraction["skipped_navigation_slides"] = skipped
+
+
+def study_slides(extraction: Dict[str, Any]) -> List[Dict[str, Any]]:
+    return [slide for slide in extraction.get("slides", []) if slide.get("study_include", True)]
+
+
+def skipped_navigation_slides(extraction: Dict[str, Any]) -> List[Dict[str, Any]]:
+    return [item for item in extraction.get("skipped_navigation_slides", []) if isinstance(item, dict)]
+
+
+def slide_filter_summary(extraction: Dict[str, Any]) -> str:
+    total = int(extraction.get("slide_count", len(extraction.get("slides", []))) or 0)
+    study_count = int(extraction.get("study_slide_count", len(study_slides(extraction))) or 0)
+    skipped = int(extraction.get("skipped_navigation_slide_count", 0) or 0)
+    return f"学习页 {study_count}/{total}；已压缩导航页 {skipped} 页"
+
+
 def apply_ocr_json(extraction: Dict[str, Any], ocr_path: Optional[Path]) -> None:
     if not ocr_path:
         return
@@ -845,11 +1051,12 @@ def apply_ocr_json(extraction: Dict[str, Any], ocr_path: Optional[Path]) -> None
 
 def make_notes_template(extraction: Dict[str, Any], language: str) -> Dict[str, Any]:
     slides = []
-    for slide in extraction.get("slides", []):
+    for slide in study_slides(extraction):
         slides.append(
             {
                 "number": slide.get("number"),
                 "title": slide.get("title", ""),
+                "content_kind": slide.get("content_kind", "content"),
                 "purpose": "",
                 "what_it_says": "",
                 "detailed_explanation": "",
@@ -869,7 +1076,15 @@ def make_notes_template(extraction: Dict[str, Any], language: str) -> Dict[str, 
                 "tags": [],
             }
         )
-    return {"language": language, "source": extraction.get("source", ""), "slides": slides}
+    return {
+        "language": language,
+        "source": extraction.get("source", ""),
+        "content_filter": extraction.get("content_filter", "study"),
+        "study_slide_count": len(slides),
+        "total_slide_count": extraction.get("slide_count", len(extraction.get("slides", []))),
+        "skipped_navigation_slides": skipped_navigation_slides(extraction),
+        "slides": slides,
+    }
 
 
 def load_notes(path: Optional[Path]) -> Dict[int, Dict[str, Any]]:
@@ -948,7 +1163,8 @@ def build_quality_report(
     slide_reports = []
     total_points = 0
     earned_points = 0
-    for slide in extraction.get("slides", []):
+    slides_to_score = study_slides(extraction)
+    for slide in slides_to_score:
         number = int(slide.get("number", 0) or 0)
         note = notes.get(number, {})
         checks = [
@@ -996,7 +1212,11 @@ def build_quality_report(
         "tool": "summarize-ppt-notes",
         "version": VERSION,
         "source": extraction.get("source", ""),
-        "slide_count": extraction.get("slide_count", 0),
+        "slide_count": len(slides_to_score),
+        "total_slide_count": extraction.get("slide_count", len(extraction.get("slides", []))),
+        "content_filter": extraction.get("content_filter", "study"),
+        "skipped_navigation_slide_count": extraction.get("skipped_navigation_slide_count", 0),
+        "skipped_navigation_slides": skipped_navigation_slides(extraction),
         "score": score,
         "earned": earned_points,
         "possible": total_points,
@@ -1014,12 +1234,18 @@ def write_quality_report(report: Dict[str, Any], json_path: Path, md_path: Path)
         "",
         f"- Source: {report.get('source', '')}",
         f"- Score: {report.get('score', 0)}%",
-        f"- Slides: {report.get('slide_count', 0)}",
+        f"- Study slides evaluated: {report.get('slide_count', 0)} / {report.get('total_slide_count', report.get('slide_count', 0))}",
+        f"- Skipped navigation slides: {report.get('skipped_navigation_slide_count', 0)}",
         f"- Passed: {report.get('passed')}",
         "",
-        "## Slide Checks",
-        "",
     ]
+    skipped = report.get("skipped_navigation_slides") or []
+    if skipped:
+        lines += ["## Skipped Navigation Slides", ""]
+        for item in skipped:
+            lines.append(f"- S{item.get('number')}: {item.get('content_kind')} - {item.get('title', '')}")
+        lines.append("")
+    lines += ["## Slide Checks", ""]
     for slide in report.get("slides", []):
         missing = slide.get("missing") or []
         status = "PASS" if not missing else "TODO"
@@ -1719,8 +1945,10 @@ def build_docx(extraction: Dict[str, Any], notes: Dict[int, Dict[str, Any]], out
     doc.add_title(title, "期末复习讲义 · 先理解，再回忆，最后刷错题")
     doc.add_meta(f"来源文件：{extraction.get('source', '')}")
     doc.add_meta(f"生成时间：{extraction.get('generated_at', '')}")
-    doc.add_meta(f"页数：{extraction.get('slide_count', 0)}")
+    doc.add_meta(f"页数：{slide_filter_summary(extraction)}")
     doc.add_meta(f"排版模式：{'复习讲义' if layout == 'study' else '审计全量'}")
+    if skipped_navigation_slides(extraction) and layout == "study":
+        doc.add_meta("标题页、目录页和章节过渡页已默认压缩；需要全量讲义时使用 --content-filter all。")
     doc.add_callout(
         "使用方式",
         [
@@ -1735,11 +1963,12 @@ def build_docx(extraction: Dict[str, Any], notes: Dict[int, Dict[str, Any]], out
     if warnings:
         add_list_section(doc, "处理提示", warnings)
 
-    for slide in extraction.get("slides", []):
+    doc_slides = extraction.get("slides", []) if layout == "audit" else study_slides(extraction)
+    for index, slide in enumerate(doc_slides, start=1):
         number = int(slide.get("number", 0) or 0)
         note = notes.get(number, {})
         title_text = note_field(note, "title") or slide.get("title") or f"Slide {number}"
-        if number > 1:
+        if index > 1:
             doc.add_page_break()
         doc.add_heading(f"第 {number} 页：{title_text}", 1)
 
@@ -1864,7 +2093,7 @@ def build_notes_markdown(extraction: Dict[str, Any], notes: Dict[int, Dict[str, 
         f"# {title}",
         "",
         f"- 来源文件: {extraction.get('source', '')}",
-        f"- 页数: {extraction.get('slide_count', 0)}",
+        f"- {slide_filter_summary(extraction)}",
         f"- 工具版本: {extraction.get('version', VERSION)}",
         "",
     ]
@@ -1874,7 +2103,14 @@ def build_notes_markdown(extraction: Dict[str, Any], notes: Dict[int, Dict[str, 
         lines += [f"- {warning}" for warning in warnings]
         lines.append("")
 
-    for slide in extraction.get("slides", []):
+    skipped = skipped_navigation_slides(extraction)
+    if skipped:
+        lines += ["## 已压缩的导航页", ""]
+        for item in skipped:
+            lines.append(f"- S{item.get('number')}: {item.get('content_kind')} - {item.get('title', '')}")
+        lines.append("")
+
+    for slide in study_slides(extraction):
         number = int(slide.get("number", 0) or 0)
         note = notes.get(number, {})
         slide_title = note_field(note, "title") or slide.get("title") or f"Slide {number}"
@@ -1981,8 +2217,9 @@ def write_prompt_pack(extraction: Dict[str, Any], output: Path, language: str) -
         "## Required Output",
         "",
         "- Return valid JSON matching `references/note-schema.md`.",
-        "- Keep one object per slide.",
-        "- Explain each slide's purpose, content, complex ideas, visual elements, formulas, and examples.",
+        "- Keep one object per included study slide.",
+        "- Title pages, agenda/table-of-contents pages, and section dividers are compacted by default; do not expand them into full notes unless `--content-filter all` was used.",
+        "- Explain each included study slide's purpose, content, complex ideas, visual elements, formulas, and examples.",
         "- Add final-exam fields: exam_focus, key_takeaways, memory_hooks, likely_questions, common_mistakes, prerequisites, difficulty, estimated_review_minutes, and tags.",
         "- likely_questions should include active-recall questions and at least one exam-style question for important formulas or algorithms.",
         "- Add `practice_questions` when possible: short original or open-source-adapted exercises with answer, solution steps, difficulty, and source/source_url if externally inspired.",
@@ -1998,10 +2235,17 @@ def write_prompt_pack(extraction: Dict[str, Any], output: Path, language: str) -
         "",
         f"- File: {extraction.get('source', '')}",
         f"- SHA256: {extraction.get('source_sha256', '')}",
-        f"- Slides: {extraction.get('slide_count', 0)}",
+        f"- {slide_filter_summary(extraction)}",
         "",
     ]
-    for slide in extraction.get("slides", []):
+    skipped = skipped_navigation_slides(extraction)
+    if skipped:
+        lines += ["## Compacted Navigation Slides", ""]
+        for item in skipped:
+            lines.append(f"- S{item.get('number')}: {item.get('content_kind')} - {item.get('title', '')}")
+        lines += ["", "Only use these pages for orientation; do not create full explanatory note objects for them.", ""]
+
+    for slide in study_slides(extraction):
         lines += [
             f"## Slide {slide.get('number')}: {slide.get('title', '')}",
             "",
@@ -2326,7 +2570,7 @@ def summarize_learning_module(items: List[Dict[str, Any]], module_index: int) ->
 
 def build_learning_modules(extraction: Dict[str, Any], notes: Dict[int, Dict[str, Any]]) -> List[Dict[str, Any]]:
     prepared: List[Dict[str, Any]] = []
-    for slide in extraction.get("slides", []):
+    for slide in study_slides(extraction):
         number = int(slide.get("number", 0) or 0)
         note = notes.get(number, {})
         prepared.append(
@@ -2457,7 +2701,7 @@ def study_days_until(exam_date: Optional[str]) -> Optional[int]:
 def write_formula_sheet(extraction: Dict[str, Any], notes: Dict[int, Dict[str, Any]], output: Path) -> None:
     lines = ["# Formula Sheet", ""]
     has_formula = False
-    for slide in extraction.get("slides", []):
+    for slide in study_slides(extraction):
         number = int(slide.get("number", 0) or 0)
         note = notes.get(number, {})
         formulas = as_list(note_field(note, "formula_explanations", "formulas"))
@@ -2495,7 +2739,7 @@ def write_formula_sheet(extraction: Dict[str, Any], notes: Dict[int, Dict[str, A
 def write_active_recall(extraction: Dict[str, Any], notes: Dict[int, Dict[str, Any]], md_path: Path, json_path: Path) -> None:
     items: List[Dict[str, Any]] = []
     lines = ["# Active Recall Questions", ""]
-    for slide in extraction.get("slides", []):
+    for slide in study_slides(extraction):
         number = int(slide.get("number", 0) or 0)
         note = notes.get(number, {})
         title = note_field(note, "title") or slide.get("title", "")
@@ -2676,7 +2920,7 @@ def write_practice_questions(
     practice_bank: Optional[List[Dict[str, Any]]] = None,
 ) -> None:
     items: List[Dict[str, Any]] = []
-    for slide in extraction.get("slides", []):
+    for slide in study_slides(extraction):
         number = int(slide.get("number", 0) or 0)
         items.extend(build_slide_practice_questions(slide, notes.get(number, {}), max_items=2, practice_bank=practice_bank))
     lines = [
@@ -2706,7 +2950,7 @@ def write_practice_questions(
 def write_flashcards(extraction: Dict[str, Any], notes: Dict[int, Dict[str, Any]], csv_path: Path, md_path: Path) -> None:
     rows = [["Front", "Back", "Tags", "SourceSlide"]]
     md_lines = ["# Flashcards", ""]
-    for slide in extraction.get("slides", []):
+    for slide in study_slides(extraction):
         number = int(slide.get("number", 0) or 0)
         note = notes.get(number, {})
         title = note_field(note, "title") or slide.get("title", f"Slide {number}")
@@ -2740,7 +2984,7 @@ def write_cram_plan(
     target_score: Optional[str],
 ) -> None:
     days = study_days_until(exam_date)
-    slide_count = len(extraction.get("slides", []))
+    slide_count = len(study_slides(extraction))
     minutes = max(daily_minutes, 20)
     target = target_score or "按课程目标自定"
     lines = [
@@ -2750,7 +2994,8 @@ def write_cram_plan(
         f"- Days left: {days if days is not None else '未设置'}",
         f"- Daily minutes: {minutes}",
         f"- Target score: {target}",
-        f"- Slides: {slide_count}",
+        f"- Study slides: {slide_count}",
+        f"- {slide_filter_summary(extraction)}",
         "",
         "## Daily Loop",
         "",
@@ -2764,7 +3009,7 @@ def write_cram_plan(
     ]
     if days is None or days >= 7:
         phases = [
-            ("Day 1-2", "通读所有页面，标记不会的公式、图表和定义。"),
+            ("Day 1-2", "通读所有学习页，标记不会的公式、图表和定义。"),
             ("Day 3-4", "按章节做主动回忆，补齐 `common_mistakes` 和错题本。"),
             ("Day 5", "只做公式、算法、图表解释题。"),
             ("Day 6", "模拟考试：闭卷回答所有 high-yield 问题。"),
@@ -2785,7 +3030,7 @@ def write_cram_plan(
     for phase, action in phases:
         lines.append(f"- **{phase}**: {action}")
     lines += ["", "## Slide Priority", ""]
-    for slide in extraction.get("slides", []):
+    for slide in study_slides(extraction):
         number = int(slide.get("number", 0) or 0)
         note = notes.get(number, {})
         difficulty = note_field(note, "difficulty") or ("困难" if slide_has_formula(slide) else "中等" if slide_has_visual(slide) else "基础")
@@ -2797,7 +3042,7 @@ def write_cram_plan(
 
 def write_one_page_review(extraction: Dict[str, Any], notes: Dict[int, Dict[str, Any]], output: Path) -> None:
     lines = ["# One Page Review", "", "## High-Yield Points", ""]
-    for slide in extraction.get("slides", []):
+    for slide in study_slides(extraction):
         number = int(slide.get("number", 0) or 0)
         note = notes.get(number, {})
         takeaways = as_list(note_field(note, "key_takeaways")) or [note_field(note, "exam_focus") or note_field(note, "what_it_says", "summary") or slide.get("title", "")]
@@ -2806,7 +3051,7 @@ def write_one_page_review(extraction: Dict[str, Any], notes: Dict[int, Dict[str,
                 lines.append(f"- S{number}: {plain(item)}")
     lines += ["", "## Must-Check Mistakes", ""]
     has_mistake = False
-    for slide in extraction.get("slides", []):
+    for slide in study_slides(extraction):
         number = int(slide.get("number", 0) or 0)
         for item in as_list(note_field(notes.get(number, {}), "common_mistakes")):
             if plain(item):
@@ -2829,7 +3074,7 @@ def mermaid_label(text: str) -> str:
 def write_concept_map(extraction: Dict[str, Any], notes: Dict[int, Dict[str, Any]], output: Path) -> None:
     lines = ["flowchart TD"]
     previous = None
-    for slide in extraction.get("slides", []):
+    for slide in study_slides(extraction):
         number = int(slide.get("number", 0) or 0)
         note = notes.get(number, {})
         label = mermaid_label(note_field(note, "title") or slide.get("title", f"Slide {number}"))
@@ -2880,7 +3125,7 @@ def write_adaptive_review(
     wrong_answers: Optional[Dict[str, Any]] = None,
 ) -> None:
     practice_items: List[Dict[str, Any]] = []
-    for slide in extraction.get("slides", []):
+    for slide in study_slides(extraction):
         number = int(slide.get("number", 0) or 0)
         practice_items.extend(build_slide_practice_questions(slide, notes.get(number, {}), max_items=1))
     template = {
@@ -2939,7 +3184,7 @@ def write_adaptive_review(
     else:
         lines += ["## 高风险页面", ""]
         risky = []
-        for slide in extraction.get("slides", []):
+        for slide in study_slides(extraction):
             number = int(slide.get("number", 0) or 0)
             note = notes.get(number, {})
             reasons = []
@@ -2983,7 +3228,7 @@ def file_uri_or_empty(path_text: str) -> str:
 def write_study_html(extraction: Dict[str, Any], notes: Dict[int, Dict[str, Any]], output: Path) -> None:
     modules = build_learning_modules(extraction, notes)
     practice_items: List[Dict[str, Any]] = []
-    for slide in extraction.get("slides", []):
+    for slide in study_slides(extraction):
         number = int(slide.get("number", 0) or 0)
         practice_items.extend(build_slide_practice_questions(slide, notes.get(number, {}), max_items=1))
     nav_items = "\n".join(
@@ -3003,7 +3248,7 @@ def write_study_html(extraction: Dict[str, Any], notes: Dict[int, Dict[str, Any]
 """.strip()
         )
     slide_cards = []
-    for slide in extraction.get("slides", []):
+    for slide in study_slides(extraction):
         number = int(slide.get("number", 0) or 0)
         note = notes.get(number, {})
         image_uri = file_uri_or_empty(slide.get("screenshot", ""))
@@ -3076,15 +3321,18 @@ def write_study_html(extraction: Dict[str, Any], notes: Dict[int, Dict[str, Any]
 
 
 def write_study_dashboard(extraction: Dict[str, Any], notes: Dict[int, Dict[str, Any]], output: Path, study_dir: Path) -> None:
-    formula_slides = [slide.get("number") for slide in extraction.get("slides", []) if slide_has_formula(slide)]
-    visual_slides = [slide.get("number") for slide in extraction.get("slides", []) if slide_has_visual(slide)]
+    slides = study_slides(extraction)
+    formula_slides = [slide.get("number") for slide in slides if slide_has_formula(slide)]
+    visual_slides = [slide.get("number") for slide in slides if slide_has_visual(slide)]
     filled_notes = len(notes)
-    total = len(extraction.get("slides", []))
+    total = len(slides)
     lines = [
         "# Study Pack Dashboard",
         "",
         f"- Source: {extraction.get('source', '')}",
-        f"- Slides: {total}",
+        f"- Study slides: {total}",
+        f"- {slide_filter_summary(extraction)}",
+        f"- Skipped navigation slides: {extraction.get('skipped_navigation_slide_count', 0)}",
         f"- Slides with filled notes: {filled_notes}",
         f"- Formula-heavy slides: {formula_slides or 'none detected'}",
         f"- Visual-heavy slides: {visual_slides or 'none detected'}",
@@ -3211,9 +3459,21 @@ def write_start_here(
         "",
         f"- 来源: `{source}`",
         f"- 质量分: {report.get('score', 0)}%",
-        f"- 页数: {report.get('slide_count', 0)}",
+        f"- 学习页: {report.get('slide_count', 0)} / 原始页: {report.get('total_slide_count', report.get('slide_count', 0))}",
+        f"- 已压缩标题/目录/章节过渡页: {report.get('skipped_navigation_slide_count', 0)}",
         "",
     ]
+    skipped = report.get("skipped_navigation_slides") or []
+    if skipped:
+        preview = "、".join(f"S{item.get('number')}" for item in skipped[:12])
+        lines += [
+            "## 已自动压缩的页面",
+            "",
+            f"- {preview}{' 等' if len(skipped) > 12 else ''}",
+            "- 这些页仍保留在调试目录的 `extraction.json` 里，但不会占用完整讲义、题目和学习路径篇幅。",
+            "- 如果确实需要逐页全量输出，重新运行时加 `--content-filter all`。",
+            "",
+        ]
     if not notes_provided:
         lines += [
             "## 当前状态",
@@ -3304,6 +3564,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--dpi", type=int, default=180, help="Slide screenshot render DPI, default: 180")
     parser.add_argument("--slides", help="Only include selected slides, for example: 1,3-5,9")
     parser.add_argument("--max-slides", type=int, help="Only include the first N extracted slides")
+    parser.add_argument("--content-filter", choices=["study", "all"], default="study", help="Default 'study' compacts title, agenda, and section divider slides; use 'all' for full per-slide output.")
     parser.add_argument("--no-render", action="store_true", help="Skip PDF conversion and screenshot rendering")
     parser.add_argument("--template-only", action="store_true", help="Create extraction files and notes template without building DOCX")
     parser.add_argument("--fail-under", type=float, help="Exit with status 1 if the notes quality score is below this percentage")
@@ -3329,6 +3590,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(str(exc), file=sys.stderr)
         return 2
     apply_ocr_json(extraction, Path(args.ocr_json).expanduser().resolve() if args.ocr_json else None)
+    annotate_slide_kinds(extraction, args.content_filter)
 
     extraction_path = workdir / "extraction.json"
     extraction_path.write_text(json.dumps(extraction, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -3403,6 +3665,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"Debug workdir: {workdir}")
 
     print(f"Quality score: {report['score']}%")
+    print(f"Content filter: {slide_filter_summary(extraction)}")
     if extraction.get("warnings"):
         print("Warnings:")
         for warning in extraction["warnings"]:

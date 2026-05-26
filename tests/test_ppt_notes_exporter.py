@@ -7,6 +7,7 @@ import sys
 import unittest
 import zipfile
 from pathlib import Path
+from xml.sax.saxutils import escape as xml_escape
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -79,6 +80,48 @@ def write_minimal_pptx(path: Path) -> None:
         pptx.writestr("ppt/media/image1.png", PNG_1X1)
 
 
+def write_text_pptx(path: Path, slides: list[list[str]]) -> None:
+    rel_items = []
+    slide_id_items = []
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as pptx:
+        for index, texts in enumerate(slides, start=1):
+            rel_items.append(
+                f'<Relationship Id="rId{index}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide{index}.xml"/>'
+            )
+            slide_id_items.append(f'<p:sldId id="{255 + index}" r:id="rId{index}"/>')
+            paragraphs = "\n".join(f"<a:p><a:r><a:t>{xml_escape(text)}</a:t></a:r></a:p>" for text in texts)
+            slide_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+       xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <p:cSld>
+    <p:spTree>
+      <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+      <p:grpSpPr/>
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="2" name="Title"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:txBody><a:bodyPr/><a:lstStyle/>{paragraphs}</p:txBody>
+      </p:sp>
+    </p:spTree>
+  </p:cSld>
+</p:sld>
+"""
+            pptx.writestr(f"ppt/slides/slide{index}.xml", slide_xml)
+        presentation_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+                xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <p:sldIdLst>{''.join(slide_id_items)}</p:sldIdLst>
+</p:presentation>
+"""
+        presentation_rels = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  {''.join(rel_items)}
+</Relationships>
+"""
+        pptx.writestr("ppt/presentation.xml", presentation_xml)
+        pptx.writestr("ppt/_rels/presentation.xml.rels", presentation_rels)
+
+
 class PptNotesExporterTest(unittest.TestCase):
     def test_extract_pptx_reads_text_images_and_related_objects(self) -> None:
         with self.subTest("minimal pptx extraction"):
@@ -97,6 +140,80 @@ class PptNotesExporterTest(unittest.TestCase):
                 self.assertTrue(slide["formula_candidates"])
                 self.assertTrue(slide["images"][0]["filename"].endswith(".png"))
                 self.assertEqual(slide["related_objects"][0]["source"], "ppt/charts/chart1.xml")
+
+    def test_content_filter_compacts_navigation_slides_by_default(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            source = tmp_path / "nav.pptx"
+            write_text_pptx(
+                source,
+                [
+                    ["Information Theory", "Lecture 9"],
+                    ["Outline", "Entropy", "Mutual Information", "Channel Capacity"],
+                    ["Entropy definition", "H(X) = - sum p(x) log p(x)", "Measures average uncertainty."],
+                    ["Chapter 2", "Noisy channel"],
+                    ["Exercise", "Compute H(X) for probabilities 1/2 and 1/2."],
+                ],
+            )
+
+            workdir = tmp_path / "work"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    str(source),
+                    "--no-render",
+                    "--template-only",
+                    "--workdir",
+                    str(workdir),
+                    "--output",
+                    str(tmp_path / "notes.docx"),
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            extraction = json.loads((workdir / "extraction.json").read_text(encoding="utf-8"))
+            self.assertEqual(extraction["slide_count"], 5)
+            self.assertEqual(extraction["study_slide_count"], 2)
+            self.assertEqual(extraction["skipped_navigation_slide_count"], 3)
+            self.assertEqual([slide["content_kind"] for slide in extraction["slides"]], ["title", "agenda", "content", "section", "exercise"])
+            template = json.loads((workdir / "notes_template.json").read_text(encoding="utf-8"))
+            self.assertEqual([slide["number"] for slide in template["slides"]], [3, 5])
+            prompt_pack = (workdir / "prompt_pack.md").read_text(encoding="utf-8")
+            self.assertIn("Compacted Navigation Slides", prompt_pack)
+            self.assertIn("## Slide 3", prompt_pack)
+            self.assertNotIn("## Slide 1", prompt_pack)
+
+            all_workdir = tmp_path / "work_all"
+            result_all = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    str(source),
+                    "--no-render",
+                    "--template-only",
+                    "--content-filter",
+                    "all",
+                    "--workdir",
+                    str(all_workdir),
+                    "--output",
+                    str(tmp_path / "all_notes.docx"),
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result_all.returncode, 0, result_all.stderr + result_all.stdout)
+            all_template = json.loads((all_workdir / "notes_template.json").read_text(encoding="utf-8"))
+            self.assertEqual([slide["number"] for slide in all_template["slides"]], [1, 2, 3, 4, 5])
+            all_extraction = json.loads((all_workdir / "extraction.json").read_text(encoding="utf-8"))
+            self.assertEqual(all_extraction["skipped_navigation_slide_count"], 0)
 
     def test_cli_creates_docx_and_quality_report(self) -> None:
         import tempfile
