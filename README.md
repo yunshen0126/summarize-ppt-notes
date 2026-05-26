@@ -60,6 +60,7 @@ python3 scripts/ppt_notes_exporter.py "slides.pptx" \
   --exam-date 2026-06-20 \
   --study-mode final \
   --layout study \
+  --output-profile teacher \
   --fail-under 85
 ```
 
@@ -101,8 +102,29 @@ Useful modes:
 - `--prompt-pack`: write a slide-by-slide prompt pack for another model or human reviewer
 - `--study-mode final`: require final-exam fields in the quality report
 - `--layout study`: polished review handout; `--layout audit` includes full raw extraction for debugging
+- `--output-profile teacher`: default clean output; creates `*_deliverables/START_HERE.md`
+- `--output-profile complete`: clean output plus all artifact paths
+- `--output-profile debug`: print raw artifact paths without packaging a clean student folder
 - `--study-pack-dir`: choose where the final-exam review pack is written
 - `--exam-date`: generate a cram plan relative to a target exam date
+
+## What Students Should Open
+
+The default teacher profile creates a clean `*_deliverables/` folder. Open this first:
+
+```text
+*_deliverables/
+├── START_HERE.md
+├── 01_复习讲义.docx
+├── 02_完整讲义.md
+├── 03_一页纸总览.md
+├── 04_主动回忆题.md
+├── 05_公式速查.md
+├── 06_错题本模板.md
+└── 可选_Anki卡片.csv
+```
+
+Students should start from `START_HERE.md`. The work directory contains debug files and should not be the first thing a learner opens.
 
 ## Final-Exam Study Pack
 

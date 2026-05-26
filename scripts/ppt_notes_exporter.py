@@ -36,7 +36,7 @@ WORD_NS = {
     "pic": "http://schemas.openxmlformats.org/drawingml/2006/picture",
 }
 
-VERSION = "0.5.0"
+VERSION = "0.6.0"
 
 BANNED_FLUFF_PATTERNS = [
     r"放回.*主线.*理解",
@@ -1912,6 +1912,133 @@ def write_study_pack(
     write_concept_map(extraction, notes, study_dir / "concept_map.mmd")
 
 
+def copy_deliverable(src: Path, dst: Path) -> Optional[Path]:
+    if not src.exists():
+        return None
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src, dst)
+    return dst
+
+
+def relative_link(path: Path, base: Path) -> str:
+    try:
+        return path.relative_to(base).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def write_start_here(
+    deliverables_dir: Path,
+    source: Path,
+    output_docx: Optional[Path],
+    notes_markdown: Path,
+    study_pack_dir: Optional[Path],
+    workdir: Path,
+    report: Dict[str, Any],
+    notes_provided: bool,
+) -> Dict[str, Path]:
+    deliverables_dir.mkdir(parents=True, exist_ok=True)
+    files: Dict[str, Path] = {}
+
+    if output_docx and output_docx.exists():
+        copied = copy_deliverable(output_docx, deliverables_dir / "01_复习讲义.docx")
+        if copied:
+            files["handout"] = copied
+    if notes_markdown.exists():
+        copied = copy_deliverable(notes_markdown, deliverables_dir / "02_完整讲义.md")
+        if copied:
+            files["markdown"] = copied
+
+    if study_pack_dir and study_pack_dir.exists():
+        mapping = [
+            ("overview", "one_page_review.md", "03_一页纸总览.md"),
+            ("recall", "active_recall_questions.md", "04_主动回忆题.md"),
+            ("formula", "formula_sheet.md", "05_公式速查.md"),
+            ("mistakes", "mistake_log_template.md", "06_错题本模板.md"),
+            ("anki", "flashcards_anki.csv", "可选_Anki卡片.csv"),
+            ("plan", "exam_cram_plan.md", "可选_冲刺计划.md"),
+        ]
+        for key, src_name, dst_name in mapping:
+            copied = copy_deliverable(study_pack_dir / src_name, deliverables_dir / dst_name)
+            if copied:
+                files[key] = copied
+
+    quality_src = workdir / "quality_report.md"
+    copied_quality = copy_deliverable(quality_src, deliverables_dir / "质量检查.md")
+    if copied_quality:
+        files["quality"] = copied_quality
+
+    lines = [
+        "# START HERE",
+        "",
+        "这是给学生看的入口页。不要从 `work/`、`extraction.json` 或截图文件夹开始看；那些是调试材料。",
+        "",
+        f"- 来源: `{source}`",
+        f"- 质量分: {report.get('score', 0)}%",
+        f"- 页数: {report.get('slide_count', 0)}",
+        "",
+    ]
+    if not notes_provided:
+        lines += [
+            "## 当前状态",
+            "",
+            "现在只是初稿骨架：已经完成截图、文字和素材提取，但还没有填入高质量逐页讲解。",
+            "",
+            "下一步：填写 `notes_template.json`，再重新运行并传入 `--notes-json`。",
+            "",
+        ]
+    lines += [
+        "## 你只需要先看这 4 个",
+        "",
+    ]
+    priority = [
+        ("1. 复习讲义", "handout", "按页阅读，包含截图、考点、深度讲解、公式例题和常见错误。"),
+        ("2. 一页纸总览", "overview", "考试前快速过全局重点。"),
+        ("3. 主动回忆题", "recall", "闭卷答题。答不出来再回看讲义。"),
+        ("4. 公式速查", "formula", "只复习公式、变量、条件和例题。"),
+    ]
+    for title, key, desc in priority:
+        if key in files:
+            lines.append(f"- **{title}**: [{files[key].name}]({relative_link(files[key], deliverables_dir)}) - {desc}")
+        else:
+            lines.append(f"- **{title}**: 未生成 - {desc}")
+    lines += [
+        "",
+        "## 可选材料",
+        "",
+    ]
+    optional = [
+        ("Anki 卡片", "anki", "导入 Anki 做间隔复习。"),
+        ("错题本模板", "mistakes", "把不会的题、错因和复盘写进去。"),
+        ("冲刺计划", "plan", "临近期末时按天安排。"),
+        ("完整 Markdown", "markdown", "适合在编辑器里搜索和二次整理。"),
+        ("质量检查", "quality", "看哪些页解释还不够深。"),
+    ]
+    for title, key, desc in optional:
+        if key in files:
+            lines.append(f"- [{title}]({relative_link(files[key], deliverables_dir)}) - {desc}")
+    lines += [
+        "",
+        "## 不建议先看",
+        "",
+        f"- `{workdir}`: 调试目录，里面是截图、提取 JSON、prompt pack 和中间文件。",
+        "- `extraction.json`: 给工具和开发者看的结构化素材，不是学生复习入口。",
+        "- 单张截图文件夹: 只有在核对公式或图表时再打开。",
+        "",
+        "## 推荐复习顺序",
+        "",
+        "1. 读 `01_复习讲义.docx`，每页只抓“考点定位、深度讲解、公式例题、常见错误”。",
+        "2. 合上讲义，做 `04_主动回忆题.md`。",
+        "3. 错题写入 `06_错题本模板.md`。",
+        "4. 考前只看 `03_一页纸总览.md`、`05_公式速查.md` 和错题本。",
+        "",
+    ]
+    start = deliverables_dir / "START_HERE.md"
+    start.write_text("\n".join(lines), encoding="utf-8")
+    files["start"] = start
+    return files
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Extract PPT/PDF slide content and build a Word study-notes document.")
     parser.add_argument("source", help="Input .pptx, .ppt, or slide .pdf")
@@ -1921,6 +2048,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--notes-markdown", help="Output final study notes as Markdown; defaults to workdir/final_notes.md")
     parser.add_argument("--prompt-pack", help="Output LLM/VLM prompt pack; defaults to workdir/prompt_pack.md")
     parser.add_argument("--study-pack-dir", help="Directory for final-exam review pack; defaults to workdir/study_pack")
+    parser.add_argument("--deliverables-dir", help="Clean student-facing output folder; defaults to output-name_deliverables")
     parser.add_argument("--no-study-pack", action="store_true", help="Skip final-exam review pack generation")
     parser.add_argument("--exam-date", help="Exam date in YYYY-MM-DD format for cram-plan generation")
     parser.add_argument("--daily-minutes", type=int, default=90, help="Daily study minutes for cram-plan generation, default: 90")
@@ -1934,6 +2062,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--fail-under", type=float, help="Exit with status 1 if the notes quality score is below this percentage")
     parser.add_argument("--study-mode", choices=["notes", "final"], default="notes", help="Quality-report mode. Use 'final' to require exam-review fields.")
     parser.add_argument("--layout", choices=["study", "audit"], default="study", help="DOCX layout. 'study' is polished review handout; 'audit' includes full raw extraction.")
+    parser.add_argument("--output-profile", choices=["teacher", "complete", "debug"], default="teacher", help="How much output to surface. teacher shows a clean START_HERE folder; complete/debug print all artifact paths.")
     parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
     args = parser.parse_args(argv)
 
@@ -1978,20 +2107,42 @@ def main(argv: Optional[List[str]] = None) -> int:
     quality_md_path = workdir / "quality_report.md"
     write_quality_report(report, quality_json_path, quality_md_path)
 
+    built_docx: Optional[Path] = None
     if not args.template_only:
         build_docx(extraction, notes, output, layout=args.layout)
+        built_docx = output
         print(f"DOCX: {output}")
     else:
         print("DOCX: skipped (--template-only)")
-    print(f"Extraction JSON: {extraction_path}")
-    print(f"Notes template: {template_path}")
-    print(f"Markdown extraction: {markdown_path}")
-    print(f"Final notes Markdown: {notes_markdown_path}")
-    print(f"Prompt pack: {prompt_pack_path}")
-    if not args.no_study_pack:
-        print(f"Study pack: {study_pack_dir}")
-    print(f"Quality report JSON: {quality_json_path}")
-    print(f"Quality report Markdown: {quality_md_path}")
+
+    deliverables_dir = Path(args.deliverables_dir).expanduser().resolve() if args.deliverables_dir else output.with_suffix("").with_name(output.stem + "_deliverables")
+    if args.output_profile in {"teacher", "complete"}:
+        delivered = write_start_here(
+            deliverables_dir,
+            source,
+            built_docx,
+            notes_markdown_path,
+            None if args.no_study_pack else study_pack_dir,
+            workdir,
+            report,
+            bool(args.notes_json),
+        )
+        print(f"START HERE: {delivered['start']}")
+
+    if args.output_profile in {"complete", "debug"}:
+        print(f"Extraction JSON: {extraction_path}")
+        print(f"Notes template: {template_path}")
+        print(f"Markdown extraction: {markdown_path}")
+        print(f"Final notes Markdown: {notes_markdown_path}")
+        print(f"Prompt pack: {prompt_pack_path}")
+        if not args.no_study_pack:
+            print(f"Study pack: {study_pack_dir}")
+        print(f"Quality report JSON: {quality_json_path}")
+        print(f"Quality report Markdown: {quality_md_path}")
+    else:
+        print(f"Clean deliverables: {deliverables_dir}")
+        print(f"Debug workdir: {workdir}")
+
     print(f"Quality score: {report['score']}%")
     if extraction.get("warnings"):
         print("Warnings:")

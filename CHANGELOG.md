@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0
+
+- Add teacher output profile with a clean `*_deliverables/START_HERE.md` entry point.
+- Copy the few student-facing files into a simple deliverables folder.
+- Hide raw extraction artifacts from default CLI output while preserving complete/debug modes.
+
 ## 0.5.0
 
 - Redesign default DOCX output into a polished study-handout layout.

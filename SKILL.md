@@ -34,13 +34,13 @@ Chinese is the default output language unless the user asks otherwise.
    - `likely_questions`: active-recall and exam-style questions with answer hints.
    - `common_mistakes`: traps, confusing pairs, missing conditions, and calculation pitfalls.
    - `memory_hooks`: concise memory aids, contrast rules, or step patterns.
-6. Re-run the script with the filled notes JSON to build the final Word document. Use a quality gate for serious work:
+6. Re-run the script with the filled notes JSON to build the final Word document. Use the default teacher profile so the user sees one clean `START_HERE.md` entry instead of many intermediate files:
 
    ```bash
-   python3 /path/to/summarize-ppt-notes/scripts/ppt_notes_exporter.py "/path/to/slides.pptx" --notes-json "/path/to/notes_filled.json" --output "/path/to/PPT学习笔记.docx" --notes-markdown "/path/to/PPT学习笔记.md" --study-mode final --layout study --fail-under 85
+   python3 /path/to/summarize-ppt-notes/scripts/ppt_notes_exporter.py "/path/to/slides.pptx" --notes-json "/path/to/notes_filled.json" --output "/path/to/PPT学习笔记.docx" --notes-markdown "/path/to/PPT学习笔记.md" --study-mode final --layout study --output-profile teacher --fail-under 85
    ```
 
-7. Verify the final Word, Markdown, and `study_pack/` outputs exist. Check that slide count, screenshots, formulas, chart/diagram objects, extracted images, active-recall questions, formula sheet, flashcards, concept map, and mistake-log template are represented. If any formula or visual element cannot be read confidently, mark it clearly as `需核对` and explain what is uncertain.
+7. Verify the final `*_deliverables/START_HERE.md` exists. The final answer should point the user to START_HERE first, then mention debug/work directories only as optional. Check that slide count, screenshots, formulas, chart/diagram objects, extracted images, active-recall questions, formula sheet, flashcards, concept map, and mistake-log template are represented. If any formula or visual element cannot be read confidently, mark it clearly as `需核对` and explain what is uncertain.
 
 ## Slide Analysis Standard
 
@@ -97,6 +97,7 @@ For diagrams, name nodes, arrows, axes, regions, or table columns. Do not write 
 
 Before finalizing:
 
+- There is a clean student-facing `START_HERE.md` that says what to read first, what is optional, and what is only for debugging.
 - Slide count in the Word document matches the deck or PDF page count.
 - Every slide has a screenshot or a documented reason why rendering failed.
 - No obvious formula, chart, table, or image is ignored.
