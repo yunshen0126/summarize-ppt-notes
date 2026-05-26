@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name="summarize-ppt-notes",
-    version="0.4.0",
+    version="0.5.0",
     description="Codex Skill and CLI for turning slide decks into detailed Word study notes.",
     packages=["ppt_notes_summarizer", "scripts"],
     python_requires=">=3.9",

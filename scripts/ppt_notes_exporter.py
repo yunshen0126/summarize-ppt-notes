@@ -36,7 +36,33 @@ WORD_NS = {
     "pic": "http://schemas.openxmlformats.org/drawingml/2006/picture",
 }
 
-VERSION = "0.4.0"
+VERSION = "0.5.0"
+
+BANNED_FLUFF_PATTERNS = [
+    r"放回.*主线.*理解",
+    r"先明确解决的问题",
+    r"建议.*仔细.*理解",
+    r"复习时按三步走",
+    r"本页需要.*理解",
+    r"请.*回看.*截图",
+    r"待补写",
+    r"无或待补写",
+    r"本页属于.*模块",
+]
+
+STYLE_COLORS = {
+    "ink": "1F2937",
+    "muted": "6B7280",
+    "blue": "1D4ED8",
+    "blue_bg": "EFF6FF",
+    "green": "047857",
+    "green_bg": "ECFDF5",
+    "amber": "B45309",
+    "amber_bg": "FFFBEB",
+    "red": "B91C1C",
+    "red_bg": "FEF2F2",
+    "slate_bg": "F8FAFC",
+}
 
 
 def local_name(tag: str) -> str:
@@ -657,8 +683,33 @@ def meaningful_text(value: Any) -> str:
     return str(value).strip()
 
 
+def count_cjk_or_words(text: str) -> int:
+    cjk = re.findall(r"[\u4e00-\u9fff]", text)
+    words = re.findall(r"[A-Za-z0-9_]+", text)
+    return len(cjk) + len(words)
+
+
+def has_banned_fluff(value: Any) -> bool:
+    text = meaningful_text(value)
+    return any(re.search(pattern, text) for pattern in BANNED_FLUFF_PATTERNS)
+
+
+def has_specific_terms(value: Any, slide: Dict[str, Any]) -> bool:
+    text = meaningful_text(value)
+    source_terms = []
+    for item in slide.get("text") or []:
+        source_terms.extend(re.findall(r"[A-Za-z][A-Za-z0-9_-]{2,}|[\u4e00-\u9fff]{2,}", str(item)))
+    source_terms = [term for term in dict.fromkeys(source_terms) if len(term) >= 2]
+    hits = sum(1 for term in source_terms[:30] if term in text)
+    return hits >= 2 or bool(slide.get("formula_candidates") and any(str(c) in text for c in slide.get("formula_candidates") or []))
+
+
 def field_has_content(note: Dict[str, Any], min_chars: int, *keys: str) -> bool:
     return len(meaningful_text(note_field(note, *keys))) >= min_chars
+
+
+def field_is_dense(note: Dict[str, Any], min_units: int, *keys: str) -> bool:
+    return count_cjk_or_words(meaningful_text(note_field(note, *keys))) >= min_units
 
 
 def slide_has_formula(slide: Dict[str, Any]) -> bool:
@@ -682,19 +733,21 @@ def build_quality_report(
         number = int(slide.get("number", 0) or 0)
         note = notes.get(number, {})
         checks = [
-            ("purpose", "这一页是干什么用的", field_has_content(note, 12, "purpose", "page_purpose")),
-            ("what_it_says", "这一页讲了什么", field_has_content(note, 24, "what_it_says", "summary")),
-            ("detailed_explanation", "复杂内容详解", field_has_content(note, 32, "detailed_explanation", "complex_explanation")),
+            ("purpose", "这一页是干什么用的", field_is_dense(note, 18, "purpose", "page_purpose")),
+            ("what_it_says", "这一页讲了什么", field_is_dense(note, 45, "what_it_says", "summary")),
+            ("detailed_explanation", "复杂内容详解", field_is_dense(note, 90, "detailed_explanation", "complex_explanation")),
+            ("specificity", "讲解引用本页具体术语", has_specific_terms(note_field(note, "what_it_says", "detailed_explanation", "summary"), slide)),
+            ("anti_fluff", "讲解不能是套话/空话", not has_banned_fluff(note)),
         ]
         if slide_has_visual(slide):
-            checks.append(("visual_explanation", "图片/图表/表格说明", field_has_content(note, 20, "visual_explanation", "image_explanation")))
+            checks.append(("visual_explanation", "图片/图表/表格说明", field_is_dense(note, 35, "visual_explanation", "image_explanation")))
         if slide_has_formula(slide):
             checks.append(("formula_explanations", "公式说明", bool(note_field(note, "formula_explanations", "formulas"))))
             checks.append(("worked_examples", "公式或方法例题", bool(note_field(note, "worked_examples", "examples"))))
         if study_mode == "final":
             checks.extend(
                 [
-                    ("exam_focus", "期末考点定位", field_has_content(note, 12, "exam_focus")),
+                    ("exam_focus", "期末考点定位", field_is_dense(note, 25, "exam_focus")),
                     ("key_takeaways", "核心记忆点", bool(note_field(note, "key_takeaways"))),
                     ("likely_questions", "可能考法/自测题", bool(note_field(note, "likely_questions"))),
                     ("common_mistakes", "常见错误", bool(note_field(note, "common_mistakes"))),
@@ -812,6 +865,42 @@ class DocxBuilder:
         style = "Heading1" if level == 1 else "Heading2"
         self.add_paragraph(text, style=style)
 
+    def add_title(self, title: str, subtitle: str = "") -> None:
+        self.add_paragraph(title, style="Title")
+        if subtitle:
+            self.add_paragraph(subtitle, style="Subtitle")
+
+    def add_meta(self, text: Any) -> None:
+        self.add_paragraph(text, style="Meta")
+
+    def add_page_break(self) -> None:
+        self.body.append('<w:p><w:r><w:br w:type="page"/></w:r></w:p>')
+
+    def add_section_label(self, text: str) -> None:
+        self.add_paragraph(text, style="SectionLabel")
+
+    def add_callout(self, title: str, value: Any, style: str = "InsightBox", placeholder: str = "无") -> None:
+        self.add_paragraph(title, style=style, bold=True)
+        self.add_structured_value(value, placeholder=placeholder, bullet_style=f"{style}Text", paragraph_style=f"{style}Text")
+
+    def add_structured_value(
+        self,
+        value: Any,
+        placeholder: str = "无",
+        bullet_style: str = "ListBullet",
+        paragraph_style: Optional[str] = None,
+    ) -> None:
+        if isinstance(value, list):
+            if value:
+                for item in value:
+                    self.add_bullet(item if not isinstance(item, dict) else json.dumps(item, ensure_ascii=False), style=bullet_style)
+            else:
+                self.add_paragraph(placeholder, style=paragraph_style)
+        elif value:
+            self.add_paragraph(value, style=paragraph_style)
+        else:
+            self.add_paragraph(placeholder, style=paragraph_style)
+
     def add_paragraph(self, text: Any = "", style: Optional[str] = None, bold: bool = False) -> None:
         text = "" if text is None else str(text)
         style_xml = f'<w:pPr><w:pStyle w:val="{style}"/></w:pPr>' if style else ""
@@ -824,8 +913,8 @@ class DocxBuilder:
             run_parts.append(f'<w:t xml:space="preserve">{w_text(line)}</w:t>')
         self.body.append(f"<w:p>{style_xml}<w:r>{run_props}{''.join(run_parts)}</w:r></w:p>")
 
-    def add_bullet(self, text: Any) -> None:
-        self.add_paragraph(f"- {text}", style="ListBullet")
+    def add_bullet(self, text: Any, style: str = "ListBullet") -> None:
+        self.add_paragraph(f"- {text}", style=style)
 
     def add_image(self, path_text: str, max_width_inches: float = 6.4) -> bool:
         if not path_text:
@@ -883,7 +972,7 @@ class DocxBuilder:
     {body}
     <w:sectPr>
       <w:pgSz w:w="11906" w:h="16838"/>
-      <w:pgMar w:top="850" w:right="850" w:bottom="850" w:left="850" w:header="708" w:footer="708" w:gutter="0"/>
+      <w:pgMar w:top="720" w:right="820" w:bottom="720" w:left="820" w:header="560" w:footer="560" w:gutter="0"/>
     </w:sectPr>
   </w:body>
 </w:document>'''
@@ -973,26 +1062,105 @@ def styles_xml() -> str:
 <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
   <w:style w:type="paragraph" w:default="1" w:styleId="Normal">
     <w:name w:val="Normal"/>
-    <w:rPr><w:rFonts w:ascii="Microsoft YaHei" w:eastAsia="Microsoft YaHei" w:hAnsi="Microsoft YaHei"/><w:sz w:val="21"/></w:rPr>
+    <w:pPr><w:spacing w:before="0" w:after="120" w:line="330" w:lineRule="auto"/></w:pPr>
+    <w:rPr><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="1F2937"/><w:sz w:val="21"/></w:rPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="Title">
+    <w:name w:val="Title"/>
+    <w:basedOn w:val="Normal"/>
+    <w:pPr><w:spacing w:before="240" w:after="120"/><w:jc w:val="center"/></w:pPr>
+    <w:rPr><w:b/><w:rFonts w:ascii="Aptos Display" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos Display"/><w:color w:val="0F172A"/><w:sz w:val="44"/></w:rPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="Subtitle">
+    <w:name w:val="Subtitle"/>
+    <w:basedOn w:val="Normal"/>
+    <w:pPr><w:spacing w:after="360"/><w:jc w:val="center"/></w:pPr>
+    <w:rPr><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="475569"/><w:sz w:val="23"/></w:rPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="Meta">
+    <w:name w:val="Meta"/>
+    <w:basedOn w:val="Normal"/>
+    <w:pPr><w:spacing w:before="0" w:after="80"/></w:pPr>
+    <w:rPr><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="64748B"/><w:sz w:val="18"/></w:rPr>
   </w:style>
   <w:style w:type="paragraph" w:styleId="Heading1">
     <w:name w:val="heading 1"/>
     <w:basedOn w:val="Normal"/>
     <w:next w:val="Normal"/>
-    <w:pPr><w:spacing w:before="360" w:after="180"/><w:outlineLvl w:val="0"/></w:pPr>
-    <w:rPr><w:b/><w:rFonts w:ascii="Microsoft YaHei" w:eastAsia="Microsoft YaHei" w:hAnsi="Microsoft YaHei"/><w:sz w:val="34"/></w:rPr>
+    <w:pPr><w:spacing w:before="360" w:after="160"/><w:keepNext/><w:outlineLvl w:val="0"/><w:pBdr><w:bottom w:val="single" w:sz="8" w:space="3" w:color="2563EB"/></w:pBdr></w:pPr>
+    <w:rPr><w:b/><w:rFonts w:ascii="Aptos Display" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos Display"/><w:color w:val="1E3A8A"/><w:sz w:val="32"/></w:rPr>
   </w:style>
   <w:style w:type="paragraph" w:styleId="Heading2">
     <w:name w:val="heading 2"/>
     <w:basedOn w:val="Normal"/>
     <w:next w:val="Normal"/>
-    <w:pPr><w:spacing w:before="240" w:after="120"/><w:outlineLvl w:val="1"/></w:pPr>
-    <w:rPr><w:b/><w:rFonts w:ascii="Microsoft YaHei" w:eastAsia="Microsoft YaHei" w:hAnsi="Microsoft YaHei"/><w:sz w:val="26"/></w:rPr>
+    <w:pPr><w:spacing w:before="220" w:after="90"/><w:keepNext/><w:outlineLvl w:val="1"/></w:pPr>
+    <w:rPr><w:b/><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="0F766E"/><w:sz w:val="24"/></w:rPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="SectionLabel">
+    <w:name w:val="Section Label"/>
+    <w:basedOn w:val="Normal"/>
+    <w:pPr><w:spacing w:before="180" w:after="70"/></w:pPr>
+    <w:rPr><w:b/><w:caps/><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="334155"/><w:sz w:val="18"/></w:rPr>
   </w:style>
   <w:style w:type="paragraph" w:styleId="ListBullet">
     <w:name w:val="List Bullet"/>
     <w:basedOn w:val="Normal"/>
-    <w:pPr><w:ind w:left="360" w:hanging="180"/></w:pPr>
+    <w:pPr><w:spacing w:after="70"/><w:ind w:left="360" w:hanging="180"/></w:pPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="SourceText">
+    <w:name w:val="Source Text"/>
+    <w:basedOn w:val="Normal"/>
+    <w:pPr><w:spacing w:after="60"/><w:shd w:val="clear" w:color="auto" w:fill="F8FAFC"/></w:pPr>
+    <w:rPr><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="475569"/><w:sz w:val="18"/></w:rPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="InsightBox">
+    <w:name w:val="Insight Box"/>
+    <w:basedOn w:val="Normal"/>
+    <w:pPr><w:spacing w:before="120" w:after="40"/><w:shd w:val="clear" w:color="auto" w:fill="EFF6FF"/><w:pBdr><w:left w:val="single" w:sz="18" w:space="5" w:color="2563EB"/></w:pBdr></w:pPr>
+    <w:rPr><w:b/><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="1D4ED8"/><w:sz w:val="21"/></w:rPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="InsightBoxText">
+    <w:name w:val="Insight Box Text"/>
+    <w:basedOn w:val="Normal"/>
+    <w:pPr><w:spacing w:after="90"/><w:shd w:val="clear" w:color="auto" w:fill="EFF6FF"/><w:ind w:left="260"/></w:pPr>
+    <w:rPr><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="1E3A8A"/><w:sz w:val="20"/></w:rPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="FormulaBox">
+    <w:name w:val="Formula Box"/>
+    <w:basedOn w:val="Normal"/>
+    <w:pPr><w:spacing w:before="120" w:after="40"/><w:shd w:val="clear" w:color="auto" w:fill="ECFDF5"/><w:pBdr><w:left w:val="single" w:sz="18" w:space="5" w:color="059669"/></w:pBdr></w:pPr>
+    <w:rPr><w:b/><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="047857"/><w:sz w:val="21"/></w:rPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="FormulaBoxText">
+    <w:name w:val="Formula Box Text"/>
+    <w:basedOn w:val="Normal"/>
+    <w:pPr><w:spacing w:after="80"/><w:shd w:val="clear" w:color="auto" w:fill="ECFDF5"/><w:ind w:left="260"/></w:pPr>
+    <w:rPr><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="064E3B"/><w:sz w:val="20"/></w:rPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="ExamBox">
+    <w:name w:val="Exam Box"/>
+    <w:basedOn w:val="Normal"/>
+    <w:pPr><w:spacing w:before="120" w:after="40"/><w:shd w:val="clear" w:color="auto" w:fill="FFFBEB"/><w:pBdr><w:left w:val="single" w:sz="18" w:space="5" w:color="D97706"/></w:pBdr></w:pPr>
+    <w:rPr><w:b/><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="B45309"/><w:sz w:val="21"/></w:rPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="ExamBoxText">
+    <w:name w:val="Exam Box Text"/>
+    <w:basedOn w:val="Normal"/>
+    <w:pPr><w:spacing w:after="80"/><w:shd w:val="clear" w:color="auto" w:fill="FFFBEB"/><w:ind w:left="260"/></w:pPr>
+    <w:rPr><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="78350F"/><w:sz w:val="20"/></w:rPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="MistakeBox">
+    <w:name w:val="Mistake Box"/>
+    <w:basedOn w:val="Normal"/>
+    <w:pPr><w:spacing w:before="120" w:after="40"/><w:shd w:val="clear" w:color="auto" w:fill="FEF2F2"/><w:pBdr><w:left w:val="single" w:sz="18" w:space="5" w:color="DC2626"/></w:pBdr></w:pPr>
+    <w:rPr><w:b/><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="B91C1C"/><w:sz w:val="21"/></w:rPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="MistakeBoxText">
+    <w:name w:val="Mistake Box Text"/>
+    <w:basedOn w:val="Normal"/>
+    <w:pPr><w:spacing w:after="80"/><w:shd w:val="clear" w:color="auto" w:fill="FEF2F2"/><w:ind w:left="260"/></w:pPr>
+    <w:rPr><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="7F1D1D"/><w:sz w:val="20"/></w:rPr>
   </w:style>
 </w:styles>'''
 
@@ -1017,29 +1185,30 @@ def note_field(note: Dict[str, Any], *keys: str) -> Any:
 
 
 def add_note_text(doc: DocxBuilder, label: str, value: Any, placeholder: str) -> None:
-    doc.add_paragraph(label, bold=True)
-    if isinstance(value, list):
-        if value:
-            for item in value:
-                doc.add_bullet(item if not isinstance(item, dict) else json.dumps(item, ensure_ascii=False))
-        else:
-            doc.add_paragraph(placeholder)
-    elif value:
-        doc.add_paragraph(value)
-    else:
-        doc.add_paragraph(placeholder)
+    doc.add_section_label(label)
+    doc.add_structured_value(value, placeholder=placeholder)
+
+
+def format_question_item(item: Any) -> str:
+    if isinstance(item, dict):
+        question = item.get("question") or item.get("front") or ""
+        answer = item.get("answer") or item.get("back") or item.get("answer_hint") or ""
+        if question and answer:
+            return f"Q: {question}\nA: {answer}"
+        return json.dumps(item, ensure_ascii=False)
+    return str(item)
 
 
 def add_formula_notes(doc: DocxBuilder, formulas: Any) -> None:
-    doc.add_paragraph("公式说明和例题", bold=True)
+    doc.add_paragraph("公式说明和例题", style="FormulaBox", bold=True)
     if not formulas:
-        doc.add_paragraph("无或待补写。")
+        doc.add_paragraph("无。", style="FormulaBoxText")
         return
     if isinstance(formulas, str):
-        doc.add_paragraph(formulas)
+        doc.add_paragraph(formulas, style="FormulaBoxText")
         return
     if not isinstance(formulas, list):
-        doc.add_paragraph(json.dumps(formulas, ensure_ascii=False))
+        doc.add_paragraph(json.dumps(formulas, ensure_ascii=False), style="FormulaBoxText")
         return
     for item in formulas:
         if isinstance(item, dict):
@@ -1047,24 +1216,50 @@ def add_formula_notes(doc: DocxBuilder, formulas: Any) -> None:
             meaning = item.get("meaning", "")
             conditions = item.get("conditions", "")
             example = item.get("example", "")
-            doc.add_bullet(f"公式：{formula}" if formula else "公式：未填写")
+            doc.add_bullet(f"公式：{formula}" if formula else "公式：未填写", style="FormulaBoxText")
             if meaning:
-                doc.add_paragraph(f"含义：{meaning}")
+                doc.add_paragraph(f"含义：{meaning}", style="FormulaBoxText")
             if conditions:
-                doc.add_paragraph(f"条件：{conditions}")
+                doc.add_paragraph(f"条件：{conditions}", style="FormulaBoxText")
             if example:
-                doc.add_paragraph(f"例题：{example}")
+                doc.add_paragraph(f"例题：{example}", style="FormulaBoxText")
         else:
-            doc.add_bullet(item)
+            doc.add_bullet(item, style="FormulaBoxText")
 
 
-def build_docx(extraction: Dict[str, Any], notes: Dict[int, Dict[str, Any]], output: Path) -> None:
+def compact_source_items(items: List[Any], limit: int = 8) -> List[Any]:
+    if len(items) <= limit:
+        return items
+    return items[:limit] + [f"... 其余 {len(items) - limit} 条见 extraction.json"]
+
+
+def add_question_notes(doc: DocxBuilder, questions: Any) -> None:
+    doc.add_paragraph("可能考法/自测题", style="ExamBox", bold=True)
+    items = as_list(questions)
+    if not items:
+        doc.add_paragraph("待补写：至少包含 1 道闭卷自测题和 1 道考试风格题。", style="ExamBoxText")
+        return
+    for item in items:
+        doc.add_bullet(format_question_item(item), style="ExamBoxText")
+
+
+def build_docx(extraction: Dict[str, Any], notes: Dict[int, Dict[str, Any]], output: Path, layout: str = "study") -> None:
     title = f"PPT学习笔记 - {Path(extraction.get('source', 'slides')).stem}"
     doc = DocxBuilder(title)
-    doc.add_heading(title, 1)
-    doc.add_paragraph(f"来源文件：{extraction.get('source', '')}")
-    doc.add_paragraph(f"生成时间：{extraction.get('generated_at', '')}")
-    doc.add_paragraph(f"页数：{extraction.get('slide_count', 0)}")
+    doc.add_title(title, "期末复习讲义 · 先理解，再回忆，最后刷错题")
+    doc.add_meta(f"来源文件：{extraction.get('source', '')}")
+    doc.add_meta(f"生成时间：{extraction.get('generated_at', '')}")
+    doc.add_meta(f"页数：{extraction.get('slide_count', 0)}")
+    doc.add_meta(f"排版模式：{'复习讲义' if layout == 'study' else '审计全量'}")
+    doc.add_callout(
+        "使用方式",
+        [
+            "先读每页的“考点定位”和“深度讲解”，不要先背原文。",
+            "遇到公式页，必须按“公式-变量-条件-例题”四步复述。",
+            "最后用 study_pack 里的 active recall 和 flashcards 做闭卷回忆。",
+        ],
+        style="InsightBox",
+    )
 
     warnings = extraction.get("warnings") or []
     if warnings:
@@ -1074,59 +1269,63 @@ def build_docx(extraction: Dict[str, Any], notes: Dict[int, Dict[str, Any]], out
         number = int(slide.get("number", 0) or 0)
         note = notes.get(number, {})
         title_text = note_field(note, "title") or slide.get("title") or f"Slide {number}"
+        if number > 1:
+            doc.add_page_break()
         doc.add_heading(f"第 {number} 页：{title_text}", 1)
 
+        doc.add_callout("考点定位", note_field(note, "exam_focus"), style="ExamBox", placeholder="待补写：说明本页在期末考试中怎么考。")
+        doc.add_callout("必须掌握", note_field(note, "key_takeaways"), style="InsightBox", placeholder="待补写：列出本页真正需要记住的 2-4 个点。")
+        add_note_text(doc, "这一页讲什么", note_field(note, "what_it_says", "summary"), "待补写：用本页具体术语解释内容，不能泛泛而谈。")
+        add_note_text(doc, "深度讲解", note_field(note, "detailed_explanation", "complex_explanation"), "待补写：写清推理链、算法步骤、公式来源或图表含义。")
+        add_formula_notes(doc, note_field(note, "formula_explanations", "formulas"))
+        doc.add_callout("例题/套用", note_field(note, "worked_examples", "examples"), style="FormulaBox", placeholder="待补写：至少给一个能算、能判断或能复述的例子。")
+        add_question_notes(doc, note_field(note, "likely_questions"))
+        doc.add_callout("常见错误", note_field(note, "common_mistakes"), style="MistakeBox", placeholder="待补写：列出容易混淆、漏条件、算错的地方。")
+        doc.add_callout("记忆钩子", note_field(note, "memory_hooks"), style="InsightBox", placeholder="无。")
+
         screenshot = slide.get("screenshot", "")
-        doc.add_heading("页面截图", 2)
+        doc.add_heading("页面截图与核对", 2)
         if not doc.add_image(screenshot, max_width_inches=6.7):
             doc.add_paragraph("未生成页面截图。")
 
-        add_list_section(doc, "页面文字", slide.get("text") or [])
-        if slide.get("notes"):
-            add_list_section(doc, "演讲者备注", slide.get("notes") or [])
-        if slide.get("tables"):
-            add_list_section(doc, "表格内容", slide.get("tables") or [])
-        if slide.get("alt_texts"):
-            add_list_section(doc, "对象/图片替代文本", slide.get("alt_texts") or [])
-        if slide.get("related_objects"):
-            add_list_section(doc, "图表/嵌入对象数据", slide.get("related_objects") or [])
-
-        doc.add_heading("图片素材", 2)
-        images = slide.get("images") or []
-        if not images:
-            doc.add_paragraph("未提取到独立图片素材；如本页有图片，请以页面截图为准。")
-        for image in images:
-            path = image.get("path", "")
-            label = image.get("filename") or image.get("target") or "图片"
-            doc.add_paragraph(label, bold=True)
-            if path and not doc.add_image(path, max_width_inches=3.2):
-                doc.add_paragraph(path)
-            elif not path:
-                doc.add_paragraph(json.dumps(image, ensure_ascii=False))
-
         formulas = slide.get("formulas") or []
         candidates = slide.get("formula_candidates") or []
-        doc.add_heading("公式与候选表达式", 2)
-        if not formulas and not candidates:
-            doc.add_paragraph("未从结构化文本中提取到公式；仍需根据页面截图确认是否存在图片公式。")
-        for formula in formulas:
-            text = formula.get("text") or "[OMML formula]"
-            doc.add_bullet(text)
-        for candidate in candidates:
-            doc.add_bullet(candidate)
+        if formulas or candidates:
+            doc.add_paragraph("从 PPT 结构化文本识别到的公式/候选表达式", style="FormulaBox", bold=True)
+            for formula in formulas:
+                doc.add_bullet(formula.get("text") or "[OMML formula]", style="FormulaBoxText")
+            for candidate in candidates:
+                doc.add_bullet(candidate, style="FormulaBoxText")
 
-        doc.add_heading("讲解笔记", 2)
-        add_note_text(doc, "这一页是干什么用的", note_field(note, "purpose", "page_purpose"), "待补写：说明本页在整套 PPT 中的作用。")
-        add_note_text(doc, "这一页讲了什么", note_field(note, "what_it_says", "summary"), "待补写：完整解释本页内容。")
-        add_note_text(doc, "复杂内容详解", note_field(note, "detailed_explanation", "complex_explanation"), "待补写：对复杂概念、推导、图表或算法做展开说明。")
         add_note_text(doc, "图片/图表说明", note_field(note, "visual_explanation", "image_explanation"), "待补写：说明图片、图表、流程图、架构图等视觉元素。")
-        add_formula_notes(doc, note_field(note, "formula_explanations", "formulas"))
-        add_note_text(doc, "补充例题/案例", note_field(note, "worked_examples", "examples"), "无或待补写。")
-        add_note_text(doc, "期末考点定位", note_field(note, "exam_focus"), "待补写：说明本页在期末考试中可能怎么考。")
-        add_note_text(doc, "核心记忆点", note_field(note, "key_takeaways"), "待补写：列出必须背会或能复述的要点。")
-        add_note_text(doc, "记忆钩子", note_field(note, "memory_hooks"), "无或待补写。")
-        add_note_text(doc, "可能考法/自测题", note_field(note, "likely_questions"), "待补写：生成主动回忆题或考试风格问题。")
-        add_note_text(doc, "常见错误", note_field(note, "common_mistakes"), "待补写：说明学生容易错在哪里。")
+        if layout == "audit":
+            add_list_section(doc, "页面文字", slide.get("text") or [])
+            if slide.get("notes"):
+                add_list_section(doc, "演讲者备注", slide.get("notes") or [])
+            if slide.get("tables"):
+                add_list_section(doc, "表格内容", slide.get("tables") or [])
+            if slide.get("alt_texts"):
+                add_list_section(doc, "对象/图片替代文本", slide.get("alt_texts") or [])
+            if slide.get("related_objects"):
+                add_list_section(doc, "图表/嵌入对象数据", slide.get("related_objects") or [])
+
+            doc.add_heading("图片素材", 2)
+            images = slide.get("images") or []
+            if not images:
+                doc.add_paragraph("未提取到独立图片素材；如本页有图片，请以页面截图为准。")
+            for image in images:
+                path = image.get("path", "")
+                label = image.get("filename") or image.get("target") or "图片"
+                doc.add_paragraph(label, bold=True)
+                if path and not doc.add_image(path, max_width_inches=3.2):
+                    doc.add_paragraph(path)
+                elif not path:
+                    doc.add_paragraph(json.dumps(image, ensure_ascii=False))
+        else:
+            doc.add_section_label("原文核对")
+            for item in compact_source_items(slide.get("text") or [], limit=6):
+                doc.add_paragraph(item, style="SourceText")
+
         add_note_text(doc, "不确定内容", note_field(note, "uncertainties"), "无。")
 
     doc.write(output)
@@ -1315,6 +1514,9 @@ def write_prompt_pack(extraction: Dict[str, Any], output: Path, language: str) -
         "- Explain each slide's purpose, content, complex ideas, visual elements, formulas, and examples.",
         "- Add final-exam fields: exam_focus, key_takeaways, memory_hooks, likely_questions, common_mistakes, prerequisites, difficulty, estimated_review_minutes, and tags.",
         "- likely_questions should include active-recall questions and at least one exam-style question for important formulas or algorithms.",
+        "- Avoid generic filler. Do not write vague lines such as 'put this slide back into the chapter logic' unless you name the exact concept, formula, or algorithm.",
+        "- detailed_explanation must include a reasoning chain: definition -> condition -> why it works -> how to use it -> where students make mistakes.",
+        "- For each important formula, explain units/base/log convention and give a concrete numeric mini-example.",
         "- Mark uncertain visual or formula recognition as `需核对`.",
         f"- Output language: {language}.",
         "",
@@ -1731,6 +1933,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--template-only", action="store_true", help="Create extraction files and notes template without building DOCX")
     parser.add_argument("--fail-under", type=float, help="Exit with status 1 if the notes quality score is below this percentage")
     parser.add_argument("--study-mode", choices=["notes", "final"], default="notes", help="Quality-report mode. Use 'final' to require exam-review fields.")
+    parser.add_argument("--layout", choices=["study", "audit"], default="study", help="DOCX layout. 'study' is polished review handout; 'audit' includes full raw extraction.")
     parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
     args = parser.parse_args(argv)
 
@@ -1776,7 +1979,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     write_quality_report(report, quality_json_path, quality_md_path)
 
     if not args.template_only:
-        build_docx(extraction, notes, output)
+        build_docx(extraction, notes, output, layout=args.layout)
         print(f"DOCX: {output}")
     else:
         print("DOCX: skipped (--template-only)")

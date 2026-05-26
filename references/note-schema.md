@@ -70,3 +70,7 @@ Guidelines:
 - For final-exam use, fill `exam_focus`, `key_takeaways`, `likely_questions`, and `common_mistakes` for every slide.
 - `likely_questions` should include active-recall questions. For formulas, include at least one calculation or application question.
 - `memory_hooks` should be short and useful, not decorative. Prefer contrast tables, acronyms, or "first do X, then do Y" patterns.
+- Do not use generic filler such as “放回主线理解”, “先明确解决的问题”, “建议仔细理解”, or “复习时按三步走”.
+- `detailed_explanation` should be high-density: define the concept, state conditions, explain why it works, show how to use it, and name the common mistake.
+- For formulas, include log base/unit/condition when relevant and at least one numeric mini-example.
+- For algorithms, include input, output, ordered steps, correctness intuition, and final-answer check.

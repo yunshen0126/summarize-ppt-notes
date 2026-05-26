@@ -7,7 +7,7 @@ description: Create detailed Word/Markdown study notes and final-exam review pac
 
 ## Overview
 
-Use this skill to turn a slide deck (`.pptx`, `.ppt`, or slide `.pdf`) into a Word/Markdown study-notes document and a final-exam review pack. The expected output is not a brief summary: produce page-by-page notes with the original slide screenshot, complete extracted content, image/chart descriptions, formula recognition, teaching-style explanations, likely exam questions, common mistakes, memory hooks, and active-recall materials.
+Use this skill to turn a slide deck (`.pptx`, `.ppt`, or slide `.pdf`) into a Word/Markdown study-notes document and a final-exam review pack. The expected output is not a brief summary and not generic filler: produce page-by-page notes with the original slide screenshot, complete extracted content, image/chart descriptions, formula recognition, teaching-style explanations, likely exam questions, common mistakes, memory hooks, and active-recall materials.
 
 Chinese is the default output language unless the user asks otherwise.
 
@@ -37,7 +37,7 @@ Chinese is the default output language unless the user asks otherwise.
 6. Re-run the script with the filled notes JSON to build the final Word document. Use a quality gate for serious work:
 
    ```bash
-   python3 /path/to/summarize-ppt-notes/scripts/ppt_notes_exporter.py "/path/to/slides.pptx" --notes-json "/path/to/notes_filled.json" --output "/path/to/PPT学习笔记.docx" --notes-markdown "/path/to/PPT学习笔记.md" --study-mode final --fail-under 85
+   python3 /path/to/summarize-ppt-notes/scripts/ppt_notes_exporter.py "/path/to/slides.pptx" --notes-json "/path/to/notes_filled.json" --output "/path/to/PPT学习笔记.docx" --notes-markdown "/path/to/PPT学习笔记.md" --study-mode final --layout study --fail-under 85
    ```
 
 7. Verify the final Word, Markdown, and `study_pack/` outputs exist. Check that slide count, screenshots, formulas, chart/diagram objects, extracted images, active-recall questions, formula sheet, flashcards, concept map, and mistake-log template are represented. If any formula or visual element cannot be read confidently, mark it clearly as `需核对` and explain what is uncertain.
@@ -53,6 +53,30 @@ For each slide, cover the following:
 - **复杂内容详解**: expand dense logic step by step. For algorithms, describe input, output, process, and intuition. For diagrams/charts, explain axes, nodes, arrows, regions, trends, and takeaways.
 - **公式说明和例题**: list formulas, define variables, state conditions, explain intuition, then give a small numeric or conceptual example when the formula is nontrivial.
 - **期末复习字段**: identify likely exam forms, key takeaways, common mistakes, active-recall questions, memory hooks, and estimated review time.
+
+## Writing Quality Standard
+
+Avoid filler. The following patterns are not acceptable unless followed by exact slide-specific content:
+
+- “放回主线理解”
+- “先明确解决的问题”
+- “建议仔细理解”
+- “复习时按三步走”
+- “本页需要理解”
+
+Each `detailed_explanation` must include the actual concept or formula from the slide and follow this pattern when applicable:
+
+1. Define the object or problem.
+2. State the condition or assumption.
+3. Explain why the theorem/formula/algorithm works.
+4. Show how to use it on a small example.
+5. Name the common mistake.
+
+For formulas, do not stop at “说明变量含义”. Include log base/unit, condition, one numeric example, and the interpretation of the result.
+
+For algorithms, include input, output, step order, why the greedy/recursive/iterative step is valid, and how to check the final answer.
+
+For diagrams, name nodes, arrows, axes, regions, or table columns. Do not write generic “看图理解”.
 
 ## Formula Handling
 
@@ -77,6 +101,7 @@ Before finalizing:
 - Every slide has a screenshot or a documented reason why rendering failed.
 - No obvious formula, chart, table, or image is ignored.
 - Dense slides have real explanation, not just rephrasing.
+- Dense slides do not contain generic filler; they cite terms, formulas, algorithms, or examples visible on the slide.
 - Complex formulas include examples.
 - `quality_report.md` has no missing required fields for the intended delivery level.
 - In `--study-mode final`, every slide has exam focus, key takeaways, likely questions, and common mistakes.

@@ -113,10 +113,10 @@ class PptNotesExporterTest(unittest.TestCase):
                     {
                         "number": 1,
                         "title": "MSE",
-                        "purpose": "这一页用于说明模型预测误差的度量方式。",
-                        "what_it_says": "页面给出 MSE 公式，并说明它用于衡量真实值和预测值之间的平均平方差。",
-                        "detailed_explanation": "先计算每个样本的误差，再平方，最后求平均。平方可以避免正负抵消，并突出较大的预测偏差。",
-                        "visual_explanation": "图片和图表表示误差趋势，用于帮助理解预测偏差如何随样本变化。",
+                        "purpose": "这一页用于说明回归模型的预测误差如何被量化，核心对象是 MSE 平均平方误差。",
+                        "what_it_says": "页面给出 MSE 公式 MSE=(1/n)sum((y_i-yhat_i)^2)，说明它把每个样本的真实值 y_i 与预测值 yhat_i 做差、平方、求平均，用一个非负数衡量预测偏差。",
+                        "detailed_explanation": "MSE 的定义对象是一组回归预测结果。条件是每个样本都有真实值 y_i 和预测值 yhat_i，并且样本数量为 n。计算时先逐样本求误差 y_i-yhat_i，再平方以避免正负误差相互抵消，同时让较大的偏差受到更重惩罚，最后除以 n 得到平均损失。它的数值越小，表示预测整体越接近真实值；但由于平方会放大异常误差，所以对离群点较敏感。期末题通常要求代入两到三个样本手算，或解释为什么平方误差比绝对误差更强调大偏差。",
+                        "visual_explanation": "图表区域表示误差趋势或预测偏差的可视化：横向可理解为样本或时间，纵向可理解为误差大小。复习时需要把图中的偏差距离与 MSE 公式里的平方项对应起来。",
                         "formula_explanations": [
                             {
                                 "formula": "MSE = \\frac{1}{n}\\sum_i(y_i-\\hat y_i)^2",
@@ -126,7 +126,7 @@ class PptNotesExporterTest(unittest.TestCase):
                             }
                         ],
                         "worked_examples": ["两条样本逐项计算误差平方，再除以样本数。"],
-                        "exam_focus": "期末可能要求计算 MSE 或解释平方误差的含义。",
+                        "exam_focus": "期末可能给出一组真实值和预测值，要求写出 MSE 公式、逐项计算平方误差、求平均，并解释平方项为什么会放大大误差。",
                         "key_takeaways": ["MSE 是平均平方误差。", "平方会放大大误差。"],
                         "memory_hooks": ["差值 -> 平方 -> 平均。"],
                         "likely_questions": [

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.0
+
+- Redesign default DOCX output into a polished study-handout layout.
+- Add `--layout study|audit`; study mode suppresses raw extraction clutter, audit mode keeps it.
+- Add anti-fluff quality checks and denser minimum explanation requirements.
+- Add output quality documentation for deep, specific final-exam notes.
+
 ## 0.4.0
 
 - Add final-exam study-pack generation.

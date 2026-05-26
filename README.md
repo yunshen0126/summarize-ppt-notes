@@ -59,6 +59,7 @@ python3 scripts/ppt_notes_exporter.py "slides.pptx" \
   --prompt-pack "PPT学习笔记_work/prompt_pack.md" \
   --exam-date 2026-06-20 \
   --study-mode final \
+  --layout study \
   --fail-under 85
 ```
 
@@ -99,6 +100,7 @@ Useful modes:
 - `--notes-markdown`: write final notes as Markdown for GitHub preview or review
 - `--prompt-pack`: write a slide-by-slide prompt pack for another model or human reviewer
 - `--study-mode final`: require final-exam fields in the quality report
+- `--layout study`: polished review handout; `--layout audit` includes full raw extraction for debugging
 - `--study-pack-dir`: choose where the final-exam review pack is written
 - `--exam-date`: generate a cram plan relative to a target exam date
 
@@ -117,6 +119,7 @@ The generated `study_pack/` folder is designed for students who need to convert 
 - `concept_map.mmd`: Mermaid concept map
 
 See [docs/FINAL_EXAM_WORKFLOW.md](docs/FINAL_EXAM_WORKFLOW.md) for the recommended review method.
+See [docs/OUTPUT_QUALITY.md](docs/OUTPUT_QUALITY.md) for the anti-fluff writing standard used by the quality gate.
 
 ## Dependencies
 
