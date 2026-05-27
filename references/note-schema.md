@@ -9,6 +9,8 @@ Create a JSON file with this structure, then pass it to `ppt_notes_exporter.py` 
     {
       "number": 1,
       "title": "可选标题",
+      "review_tier": "deep / quick",
+      "compression_guidance": "由工具生成：说明这一页应该深讲还是速读。",
       "purpose": "这一页是干什么用的。",
       "what_it_says": "这一页讲了什么，按内容完整说明。",
       "detailed_explanation": "复杂概念、流程、图表、算法或推导的详细讲解。",
@@ -69,12 +71,14 @@ Create a JSON file with this structure, then pass it to `ppt_notes_exporter.py` 
 
 Guidelines:
 
-- Use one object per slide and keep `number` aligned with the slide/page number.
+- Use one object per note-required slide in `notes_template.json`, not per original slide. Reference/repeated slides are intentionally excluded unless `--review-depth complete` is used.
+- Keep `number` aligned with the slide/page number.
+- Respect `review_tier`: `deep` means concise but real explanation; `quick` means 2-4 bullets plus exam signal and common mistake. Do not turn quick slides into long essays.
 - Keep formulas in LaTeX where possible. If the visual form is ambiguous, preserve the original visible text and add `需核对`.
 - `formula_explanations` may be an empty list only when the slide has no formula or formula-like expression.
 - `worked_examples` should not be empty for slides containing complex formulas, derivations, algorithms, or multi-step calculations.
 - Do not omit non-text content. Put image/chart/diagram interpretation in `visual_explanation`.
-- The quality report expects substantial content in `purpose`, `what_it_says`, and `detailed_explanation` for every slide.
+- The quality report expects substantial content in `purpose`, `what_it_says`, and `detailed_explanation` for `deep` slides. For `quick` slides, it expects a compact explanation and does not require a long `detailed_explanation` unless the slide has a formula or hard diagram.
 - If the extraction reports formulas, fill both `formula_explanations` and `worked_examples`.
 - If the extraction reports images, tables, charts, diagrams, or embedded objects, fill `visual_explanation`.
 - For final-exam use, fill `exam_focus`, `key_takeaways`, `likely_questions`, and `common_mistakes` for every slide.
@@ -83,6 +87,7 @@ Guidelines:
 - `memory_hooks` should be short and useful, not decorative. Prefer contrast tables, acronyms, or "first do X, then do Y" patterns.
 - Do not use generic filler such as “放回主线理解”, “先明确解决的问题”, “建议仔细理解”, or “复习时按三步走”.
 - `detailed_explanation` should be high-density: define the concept, state conditions, explain why it works, show how to use it, and name the common mistake.
+- For large decks, write fewer, better notes. The original slide text and screenshots are already preserved; your JSON should explain the information gain, not duplicate every bullet.
 - For formulas, include log base/unit/condition when relevant and at least one numeric mini-example.
 - For algorithms, include input, output, ordered steps, correctness intuition, and final-answer check.
 

@@ -7,9 +7,17 @@ description: Create detailed Word/Markdown/HTML study notes and final-exam revie
 
 ## Overview
 
-Use this skill to turn a slide deck (`.pptx`, `.ppt`, or slide `.pdf`) into a Word/Markdown/HTML study-notes document and a final-exam review pack. The expected output is not a brief summary and not generic filler: produce deep notes for real content slides with the original slide screenshot, complete extracted content, image/chart descriptions, real Word Office Math equations, formula recognition, teaching-style explanations, a chapter-style learning path, likely exam questions, small practice exercises, wrong-answer feedback, common mistakes, memory hooks, and active-recall materials.
+Use this skill to turn a slide deck (`.pptx`, `.ppt`, or slide `.pdf`) into a Word/Markdown/HTML study-notes document and a final-exam review pack. The expected output is a readable teacher-style review system, not a giant transcript. Default behavior should compress the deck like an information-theory problem: preserve high-yield definitions, formulas, examples, traps, exam signals, and diagrams; remove repeated wording, decorative transitions, and low-increment slides.
 
 By default, compact low-value navigation slides instead of expanding them into full notes: title/cover pages, agenda/table-of-contents pages, section dividers, and closing/Q&A pages. They stay in `extraction.json` for traceability, but should not consume Word pages, practice questions, learning-path modules, flashcards, or prompt budget. Use `--content-filter all` only when the user explicitly needs full per-slide audit output.
+
+Also by default, use `--review-depth compressed`. This creates three reading tiers:
+
+- `必读深讲`: pages that deserve real explanation because they contain formulas, core definitions, examples, diagrams, or exam-heavy content.
+- `快速扫读`: pages that add context or a small new conclusion; explain in 2-4 bullets, not long paragraphs.
+- `参考/重复`: repeated or low-increment pages; list them in the reading index but do not request full note objects.
+
+Use `--review-depth complete` only when the user explicitly asks for exhaustive per-slide notes.
 
 Chinese is the default output language unless the user asks otherwise.
 
@@ -23,8 +31,8 @@ Chinese is the default output language unless the user asks otherwise.
    python3 /path/to/summarize-ppt-notes/scripts/ppt_notes_exporter.py "/path/to/slides.pptx" --output "/path/to/PPT学习笔记.docx"
    ```
 
-4. Inspect the generated `extraction.json`, `prompt_pack.md`, `quality_report.md`, `notes_template.json`, and slide screenshots in the work directory. Check `skipped_navigation_slides`; title/agenda/section pages should usually be compacted, while formula/chart/example/exercise pages must stay included. Do not rely only on XML text extraction; visually inspect screenshots to catch formulas rendered as images, charts, SmartArt, handwritten symbols, and text embedded in pictures.
-5. Fill a notes JSON file using the schema in `references/note-schema.md`. For every included study slide, write:
+4. Inspect the generated `extraction.json`, `prompt_pack.md`, `quality_report.md`, `notes_template.json`, `10_阅读取舍.md`, and slide screenshots in the work directory. Check `skipped_navigation_slides` and reading tiers. Title/agenda/section pages should usually be compacted; repeated reference pages should not be expanded; formula/chart/example/exercise pages should usually be `必读深讲` or `快速扫读`. Do not rely only on XML text extraction; visually inspect screenshots to catch formulas rendered as images, charts, SmartArt, handwritten symbols, and text embedded in pictures.
+5. Fill a notes JSON file using the schema in `references/note-schema.md`. Fill only note-required slides in `notes_template.json`, not every original slide. For `必读深讲` slides, write:
    - `purpose`: this slide's role in the lecture/presentation.
    - `what_it_says`: a faithful explanation of the visible content.
    - `detailed_explanation`: deeper explanation for dense definitions, algorithms, diagrams, derivations, tables, or charts.
@@ -37,23 +45,24 @@ Chinese is the default output language unless the user asks otherwise.
    - `practice_questions`: short exercises with answer, solution steps, difficulty, and source/source_url when adapted from open web material.
    - `common_mistakes`: traps, confusing pairs, missing conditions, and calculation pitfalls.
    - `memory_hooks`: concise memory aids, contrast rules, or step patterns.
+   For `快速扫读` slides, keep the same fields but write concise content: 2-4 key bullets, one exam signal, one mistake if relevant, and a short explanation only when a formula/diagram requires it.
 6. Re-run the script with the filled notes JSON to build the final Word document. Use `--ocr-json` when external OCR/math recognition has been produced, `--practice-bank-json` when an open/self-owned question bank is available, and `--wrong-answers-json` when the student has filled a wrong-answer log. Use the default teacher profile so the user sees one clean `START_HERE.md` entry instead of many intermediate files:
 
    ```bash
    python3 /path/to/summarize-ppt-notes/scripts/ppt_notes_exporter.py "/path/to/slides.pptx" --notes-json "/path/to/notes_filled.json" --output "/path/to/PPT学习笔记.docx" --notes-markdown "/path/to/PPT学习笔记.md" --study-mode final --layout study --output-profile teacher --fail-under 85
    ```
 
-7. Verify the final `*_deliverables/START_HERE.md`, `00_学习路径.md`, `07_小题练习.md`, `08_学习页面.html`, and `09_错题反馈路径.md` exist. The final answer should point the user to START_HERE first, then mention debug/work directories only as optional. Check that slide count, screenshots, formulas, chart/diagram objects, extracted images, teacher-style learning path, active-recall questions, practice questions with answers/solution steps, formula sheet, flashcards, concept map, HTML study page, adaptive review path, and mistake-log template are represented. If any formula or visual element cannot be read confidently, mark it clearly as `需核对` and explain what is uncertain.
+7. Verify the final `*_deliverables/START_HERE.md`, `10_阅读取舍.md`, `00_学习路径.md`, `07_小题练习.md`, `08_学习页面.html`, and `09_错题反馈路径.md` exist. The final answer should point the user to START_HERE first, then `10_阅读取舍.md`, then `00_学习路径.md`; mention debug/work directories only as optional. Check that slide count, reading tiers, screenshots, formulas, chart/diagram objects, extracted images, teacher-style learning path, active-recall questions, practice questions with answers/solution steps, formula sheet, flashcards, concept map, HTML study page, adaptive review path, and mistake-log template are represented. If any formula or visual element cannot be read confidently, mark it clearly as `需核对` and explain what is uncertain.
 
 ## Slide Analysis Standard
 
-For each included study slide, cover the following:
+For each note-required study slide, cover the following. Do not write full notes for `参考/重复` slides.
 
 - **页面截图**: include the rendered full-slide image when available.
 - **原始内容**: preserve visible text, bullet points, tables, notes, formula candidates, and extracted images.
 - **这一页是干什么用的**: explain the slide's teaching/presentation function, such as introducing a definition, proving a result, comparing methods, showing an example, or summarizing conclusions.
 - **这一页讲了什么**: restate the content in clear Chinese without losing technical terms.
-- **复杂内容详解**: expand dense logic step by step. For algorithms, describe input, output, process, and intuition. For diagrams/charts, explain axes, nodes, arrows, regions, trends, and takeaways.
+- **复杂内容详解**: expand dense logic step by step only for `必读深讲` slides. For `快速扫读` slides, compress to the minimum explanation needed to avoid misunderstanding.
 - **公式说明和例题**: list formulas, define variables, state conditions, explain intuition, then give a small numeric or conceptual example when the formula is nontrivial.
 - **期末复习字段**: identify likely exam forms, key takeaways, common mistakes, active-recall questions, memory hooks, and estimated review time.
 - **学习路径字段**: use titles, tags, prerequisites, difficulty, formulas, visuals, examples, and exam focus to infer chapter-like modules, must-read pages, and self-test checkpoints.
@@ -84,6 +93,18 @@ For algorithms, include input, output, step order, why the greedy/recursive/iter
 
 For diagrams, name nodes, arrows, axes, regions, or table columns. Do not write generic “看图理解”.
 
+## Compression Standard
+
+Default outputs should be short enough that a student wants to read them.
+
+- Treat repeated slides as redundancy. Merge their value into the nearest high-yield slide instead of writing another full page.
+- Use information gain: if a slide adds no new definition, formula, condition, example, diagram conclusion, or exam trap, mark it as reference.
+- For a 100-page deck, the expected result is usually around 15-25 `必读深讲` pages, 20-45 `快速扫读` pages, and the rest as reference/repeated pages, unless the deck is unusually dense.
+- Use “核心结论 -> 为什么 -> 怎么考 -> 易错点” as the default explanation shape.
+- Do not duplicate the original slide text. The original remains in screenshots and `extraction.json`; the notes should teach what the student must understand.
+- Prefer short, concrete examples over long conceptual paragraphs.
+- The student-facing order is `START_HERE.md` -> `10_阅读取舍.md` -> `00_学习路径.md` -> current module in `01_复习讲义.docx` -> active recall/practice.
+
 ## Formula Handling
 
 - Treat formulas in three sources as important: Office Math/OMML extracted from `.pptx`, formula-like text detected by regex, and formulas visible only in screenshots or images.
@@ -104,6 +125,7 @@ For diagrams, name nodes, arrows, axes, regions, or table columns. Do not write 
 Before finalizing:
 
 - There is a clean student-facing `START_HERE.md` that says what to read first, what is optional, and what is only for debugging.
+- `10_阅读取舍.md` exists and separates slides into must-read, quick-scan, and reference/repeated.
 - `00_学习路径.md` exists and tells the learner the chapter-style order, must-read slides, goals, checkpoints, and common traps.
 - `07_小题练习.md` exists and contains question, answer, solution steps, difficulty, and source notes.
 - `08_学习页面.html` exists as a local review page with module navigation, slide notes, formulas, and collapsible practice answers.

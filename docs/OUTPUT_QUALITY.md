@@ -10,6 +10,7 @@ Good notes are:
 - deep: they explain why a result works, not only what it says
 - operational: they show how to solve a question or check an answer
 - compact: they remove generic transitions and empty advice
+- compressed: they separate must-read, quick-scan, and reference/repeated slides instead of expanding every page equally
 - exam-aware: they name likely question types and common mistakes
 - guided: they tell students which module to study first, which slides are must-read, and when they are ready to move on
 - actionable: they include short practice questions with answers and solution steps
@@ -58,6 +59,14 @@ For a learning path:
 3. Give closed-book checkpoints.
 4. State common traps.
 5. Avoid duplicating the full notes.
+
+For reading compression:
+
+1. Preserve formulas, definitions, examples, diagrams, conditions, and exam traps.
+2. Mark low-increment or repeated pages as reference instead of asking for full explanations.
+3. Keep quick-scan slides to 2-4 bullets and one exam signal.
+4. Use the original screenshots and extraction JSON as traceability, not as material to rewrite.
+5. A student should know exactly what to read first and what can wait.
 
 For practice questions:
 

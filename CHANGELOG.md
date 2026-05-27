@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.11.0
+
+- Add default `--review-depth compressed` reading plan that separates study slides into `必读深讲`, `快速扫读`, and `参考/重复`.
+- Add repeated-slide detection and `10_阅读取舍.md` so students know what to read first, what to skim, and what can wait.
+- Reduce prompt and notes volume by only requiring note objects for deep/quick slides; reference slides stay traceable in `extraction.json`.
+- Compact quick-scan slides in Word/Markdown output and lower quality checks for quick slides while preserving strict checks for deep slides.
+- Update README, skill instructions, schema, and quality standards to emphasize information-gain compression over mechanical per-slide expansion.
+
 ## 0.10.0
 
 - Add default `--content-filter study` mode that compacts title, agenda/table-of-contents, section divider, and closing slides.
