@@ -11,6 +11,8 @@ Use this skill to turn a slide deck (`.pptx`, `.ppt`, or slide `.pdf`) into a Wo
 
 By default, compact low-value navigation slides instead of expanding them into full notes: title/cover pages, agenda/table-of-contents pages, section dividers, and closing/Q&A pages. They stay in `extraction.json` for traceability, but should not consume Word pages, practice questions, learning-path modules, flashcards, or prompt budget. Use `--content-filter all` only when the user explicitly needs full per-slide audit output.
 
+The Word document must be visually readable before it is considered done. Use high-contrast body text, dark callout text, compact paragraphs, and clear section blocks. If a generated Word file looks pale, gray, or hard to scan, treat that as a failed run and regenerate after fixing style or using the HTML/Markdown artifact as the review source.
+
 Also by default, use `--review-depth compressed`. This creates three reading tiers:
 
 - `必读深讲`: pages that deserve real explanation because they contain formulas, core definitions, examples, diagrams, or exam-heavy content.
@@ -46,6 +48,8 @@ Chinese is the default output language unless the user asks otherwise.
    - `common_mistakes`: traps, confusing pairs, missing conditions, and calculation pitfalls.
    - `memory_hooks`: concise memory aids, contrast rules, or step patterns.
    For `快速扫读` slides, keep the same fields but write concise content: 2-4 key bullets, one exam signal, one mistake if relevant, and a short explanation only when a formula/diagram requires it.
+
+   Never use placeholder answers such as “答案应包含对象、条件、操作/判断结果”, “回看本页讲义后回答”, or “写出本页核心结论”. If you cannot produce a real answer, omit the practice item and mark the uncertainty. Every practice question that reaches the user must have a usable answer and solution path.
 6. Re-run the script with the filled notes JSON to build the final Word document. Use `--ocr-json` when external OCR/math recognition has been produced, `--practice-bank-json` when an open/self-owned question bank is available, and `--wrong-answers-json` when the student has filled a wrong-answer log. Use the default teacher profile so the user sees one clean `START_HERE.md` entry instead of many intermediate files:
 
    ```bash
@@ -105,6 +109,13 @@ Default outputs should be short enough that a student wants to read them.
 - Prefer short, concrete examples over long conceptual paragraphs.
 - The student-facing order is `START_HERE.md` -> `10_阅读取舍.md` -> `00_学习路径.md` -> current module in `01_复习讲义.docx` -> active recall/practice.
 
+## Visual Output Standard
+
+- Use high-contrast Word output: dark body text, dark callout text, readable metadata, and pale backgrounds only as accents.
+- Avoid tiny gray text for anything the student must read. Metadata and source text can be smaller, but still must be legible.
+- The Word document should scan like a teacher handout: title, exam focus, must-know, explanation, example, mistakes, and original evidence are visually distinct.
+- If the Word conversion route makes the result visually weak, prefer the generated HTML/Markdown as the source of truth and regenerate DOCX through the skill script after style fixes.
+
 ## Formula Handling
 
 - Treat formulas in three sources as important: Office Math/OMML extracted from `.pptx`, formula-like text detected by regex, and formulas visible only in screenshots or images.
@@ -138,6 +149,8 @@ Before finalizing:
 - Dense slides do not contain generic filler; they cite terms, formulas, algorithms, or examples visible on the slide.
 - Complex formulas include examples.
 - `quality_report.md` has no missing required fields for the intended delivery level.
+- Practice questions do not contain placeholder answers or generic answer shells.
+- Word/HTML colors are readable on a normal laptop screen; no required content is pale gray or low contrast.
 - In `--study-mode final`, every slide has exam focus, key takeaways, likely questions, and common mistakes.
 - `study_pack/` includes a usable learning path, cram plan, formula sheet, active-recall set, practice questions, HTML page, adaptive review path, flashcards, mistake log, one-page review, and concept map.
 - The final answer to the user gives the Word document path and mentions any limitations or uncertain recognitions.

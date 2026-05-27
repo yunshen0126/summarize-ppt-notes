@@ -38,7 +38,7 @@ WORD_NS = {
     "m": NS_M,
 }
 
-VERSION = "0.11.0"
+VERSION = "0.11.1"
 
 BANNED_FLUFF_PATTERNS = [
     r"放回.*主线.*理解",
@@ -50,20 +50,24 @@ BANNED_FLUFF_PATTERNS = [
     r"待补写",
     r"无或待补写",
     r"本页属于.*模块",
+    r"答案应包含.*对象.*条件",
+    r"回看本页讲义后回答",
+    r"写出本页核心结论",
+    r"第\s*\d+\s*页.*核心考点是什么",
 ]
 
 STYLE_COLORS = {
-    "ink": "1F2937",
-    "muted": "6B7280",
-    "blue": "1D4ED8",
-    "blue_bg": "EFF6FF",
-    "green": "047857",
-    "green_bg": "ECFDF5",
-    "amber": "B45309",
-    "amber_bg": "FFFBEB",
-    "red": "B91C1C",
-    "red_bg": "FEF2F2",
-    "slate_bg": "F8FAFC",
+    "ink": "111827",
+    "muted": "374151",
+    "blue": "1E40AF",
+    "blue_bg": "EAF2FF",
+    "green": "065F46",
+    "green_bg": "EAF7F1",
+    "amber": "92400E",
+    "amber_bg": "FFF4D8",
+    "red": "991B1B",
+    "red_bg": "FFECEC",
+    "slate_bg": "F3F6FA",
 }
 
 TOPIC_STOPWORDS = {
@@ -1976,8 +1980,8 @@ def styles_xml() -> str:
 <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
   <w:style w:type="paragraph" w:default="1" w:styleId="Normal">
     <w:name w:val="Normal"/>
-    <w:pPr><w:spacing w:before="0" w:after="120" w:line="330" w:lineRule="auto"/></w:pPr>
-    <w:rPr><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="1F2937"/><w:sz w:val="21"/></w:rPr>
+    <w:pPr><w:spacing w:before="0" w:after="130" w:line="340" w:lineRule="auto"/></w:pPr>
+    <w:rPr><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="111827"/><w:sz w:val="22"/></w:rPr>
   </w:style>
   <w:style w:type="paragraph" w:styleId="Title">
     <w:name w:val="Title"/>
@@ -1989,33 +1993,33 @@ def styles_xml() -> str:
     <w:name w:val="Subtitle"/>
     <w:basedOn w:val="Normal"/>
     <w:pPr><w:spacing w:after="360"/><w:jc w:val="center"/></w:pPr>
-    <w:rPr><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="475569"/><w:sz w:val="23"/></w:rPr>
+    <w:rPr><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="334155"/><w:sz w:val="24"/></w:rPr>
   </w:style>
   <w:style w:type="paragraph" w:styleId="Meta">
     <w:name w:val="Meta"/>
     <w:basedOn w:val="Normal"/>
     <w:pPr><w:spacing w:before="0" w:after="80"/></w:pPr>
-    <w:rPr><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="64748B"/><w:sz w:val="18"/></w:rPr>
+    <w:rPr><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="334155"/><w:sz w:val="20"/></w:rPr>
   </w:style>
   <w:style w:type="paragraph" w:styleId="Heading1">
     <w:name w:val="heading 1"/>
     <w:basedOn w:val="Normal"/>
     <w:next w:val="Normal"/>
-    <w:pPr><w:spacing w:before="360" w:after="160"/><w:keepNext/><w:outlineLvl w:val="0"/><w:pBdr><w:bottom w:val="single" w:sz="8" w:space="3" w:color="2563EB"/></w:pBdr></w:pPr>
-    <w:rPr><w:b/><w:rFonts w:ascii="Aptos Display" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos Display"/><w:color w:val="1E3A8A"/><w:sz w:val="32"/></w:rPr>
+    <w:pPr><w:spacing w:before="360" w:after="160"/><w:keepNext/><w:outlineLvl w:val="0"/><w:pBdr><w:bottom w:val="single" w:sz="12" w:space="3" w:color="1E40AF"/></w:pBdr></w:pPr>
+    <w:rPr><w:b/><w:rFonts w:ascii="Aptos Display" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos Display"/><w:color w:val="172554"/><w:sz w:val="34"/></w:rPr>
   </w:style>
   <w:style w:type="paragraph" w:styleId="Heading2">
     <w:name w:val="heading 2"/>
     <w:basedOn w:val="Normal"/>
     <w:next w:val="Normal"/>
     <w:pPr><w:spacing w:before="220" w:after="90"/><w:keepNext/><w:outlineLvl w:val="1"/></w:pPr>
-    <w:rPr><w:b/><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="0F766E"/><w:sz w:val="24"/></w:rPr>
+    <w:rPr><w:b/><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="115E59"/><w:sz w:val="26"/></w:rPr>
   </w:style>
   <w:style w:type="paragraph" w:styleId="SectionLabel">
     <w:name w:val="Section Label"/>
     <w:basedOn w:val="Normal"/>
     <w:pPr><w:spacing w:before="180" w:after="70"/></w:pPr>
-    <w:rPr><w:b/><w:caps/><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="334155"/><w:sz w:val="18"/></w:rPr>
+    <w:rPr><w:b/><w:caps/><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="1F2937"/><w:sz w:val="20"/></w:rPr>
   </w:style>
   <w:style w:type="paragraph" w:styleId="ListBullet">
     <w:name w:val="List Bullet"/>
@@ -2025,62 +2029,62 @@ def styles_xml() -> str:
   <w:style w:type="paragraph" w:styleId="SourceText">
     <w:name w:val="Source Text"/>
     <w:basedOn w:val="Normal"/>
-    <w:pPr><w:spacing w:after="60"/><w:shd w:val="clear" w:color="auto" w:fill="F8FAFC"/></w:pPr>
-    <w:rPr><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="475569"/><w:sz w:val="18"/></w:rPr>
+    <w:pPr><w:spacing w:after="70"/><w:shd w:val="clear" w:color="auto" w:fill="F3F6FA"/></w:pPr>
+    <w:rPr><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="1F2937"/><w:sz w:val="20"/></w:rPr>
   </w:style>
   <w:style w:type="paragraph" w:styleId="InsightBox">
     <w:name w:val="Insight Box"/>
     <w:basedOn w:val="Normal"/>
-    <w:pPr><w:spacing w:before="120" w:after="40"/><w:shd w:val="clear" w:color="auto" w:fill="EFF6FF"/><w:pBdr><w:left w:val="single" w:sz="18" w:space="5" w:color="2563EB"/></w:pBdr></w:pPr>
-    <w:rPr><w:b/><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="1D4ED8"/><w:sz w:val="21"/></w:rPr>
+    <w:pPr><w:spacing w:before="130" w:after="50"/><w:shd w:val="clear" w:color="auto" w:fill="EAF2FF"/><w:pBdr><w:left w:val="single" w:sz="24" w:space="6" w:color="1E40AF"/></w:pBdr></w:pPr>
+    <w:rPr><w:b/><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="1E3A8A"/><w:sz w:val="22"/></w:rPr>
   </w:style>
   <w:style w:type="paragraph" w:styleId="InsightBoxText">
     <w:name w:val="Insight Box Text"/>
     <w:basedOn w:val="Normal"/>
-    <w:pPr><w:spacing w:after="90"/><w:shd w:val="clear" w:color="auto" w:fill="EFF6FF"/><w:ind w:left="260"/></w:pPr>
-    <w:rPr><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="1E3A8A"/><w:sz w:val="20"/></w:rPr>
+    <w:pPr><w:spacing w:after="100"/><w:shd w:val="clear" w:color="auto" w:fill="EAF2FF"/><w:ind w:left="260"/></w:pPr>
+    <w:rPr><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="111827"/><w:sz w:val="21"/></w:rPr>
   </w:style>
   <w:style w:type="paragraph" w:styleId="FormulaBox">
     <w:name w:val="Formula Box"/>
     <w:basedOn w:val="Normal"/>
-    <w:pPr><w:spacing w:before="120" w:after="40"/><w:shd w:val="clear" w:color="auto" w:fill="ECFDF5"/><w:pBdr><w:left w:val="single" w:sz="18" w:space="5" w:color="059669"/></w:pBdr></w:pPr>
-    <w:rPr><w:b/><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="047857"/><w:sz w:val="21"/></w:rPr>
+    <w:pPr><w:spacing w:before="130" w:after="50"/><w:shd w:val="clear" w:color="auto" w:fill="EAF7F1"/><w:pBdr><w:left w:val="single" w:sz="24" w:space="6" w:color="047857"/></w:pBdr></w:pPr>
+    <w:rPr><w:b/><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="065F46"/><w:sz w:val="22"/></w:rPr>
   </w:style>
   <w:style w:type="paragraph" w:styleId="FormulaBoxText">
     <w:name w:val="Formula Box Text"/>
     <w:basedOn w:val="Normal"/>
-    <w:pPr><w:spacing w:after="80"/><w:shd w:val="clear" w:color="auto" w:fill="ECFDF5"/><w:ind w:left="260"/></w:pPr>
-    <w:rPr><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="064E3B"/><w:sz w:val="20"/></w:rPr>
+    <w:pPr><w:spacing w:after="90"/><w:shd w:val="clear" w:color="auto" w:fill="EAF7F1"/><w:ind w:left="260"/></w:pPr>
+    <w:rPr><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="111827"/><w:sz w:val="21"/></w:rPr>
   </w:style>
   <w:style w:type="paragraph" w:styleId="FormulaDisplay">
     <w:name w:val="Formula Display"/>
     <w:basedOn w:val="Normal"/>
-    <w:pPr><w:spacing w:before="80" w:after="90"/><w:jc w:val="center"/><w:shd w:val="clear" w:color="auto" w:fill="ECFDF5"/></w:pPr>
-    <w:rPr><w:rFonts w:ascii="Cambria Math" w:eastAsia="Microsoft YaHei" w:hAnsi="Cambria Math"/><w:color w:val="064E3B"/><w:sz w:val="26"/></w:rPr>
+    <w:pPr><w:spacing w:before="90" w:after="100"/><w:jc w:val="center"/><w:shd w:val="clear" w:color="auto" w:fill="EAF7F1"/></w:pPr>
+    <w:rPr><w:rFonts w:ascii="Cambria Math" w:eastAsia="Microsoft YaHei" w:hAnsi="Cambria Math"/><w:color w:val="064E3B"/><w:sz w:val="28"/></w:rPr>
   </w:style>
   <w:style w:type="paragraph" w:styleId="ExamBox">
     <w:name w:val="Exam Box"/>
     <w:basedOn w:val="Normal"/>
-    <w:pPr><w:spacing w:before="120" w:after="40"/><w:shd w:val="clear" w:color="auto" w:fill="FFFBEB"/><w:pBdr><w:left w:val="single" w:sz="18" w:space="5" w:color="D97706"/></w:pBdr></w:pPr>
-    <w:rPr><w:b/><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="B45309"/><w:sz w:val="21"/></w:rPr>
+    <w:pPr><w:spacing w:before="130" w:after="50"/><w:shd w:val="clear" w:color="auto" w:fill="FFF4D8"/><w:pBdr><w:left w:val="single" w:sz="24" w:space="6" w:color="B45309"/></w:pBdr></w:pPr>
+    <w:rPr><w:b/><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="92400E"/><w:sz w:val="22"/></w:rPr>
   </w:style>
   <w:style w:type="paragraph" w:styleId="ExamBoxText">
     <w:name w:val="Exam Box Text"/>
     <w:basedOn w:val="Normal"/>
-    <w:pPr><w:spacing w:after="80"/><w:shd w:val="clear" w:color="auto" w:fill="FFFBEB"/><w:ind w:left="260"/></w:pPr>
-    <w:rPr><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="78350F"/><w:sz w:val="20"/></w:rPr>
+    <w:pPr><w:spacing w:after="90"/><w:shd w:val="clear" w:color="auto" w:fill="FFF4D8"/><w:ind w:left="260"/></w:pPr>
+    <w:rPr><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="111827"/><w:sz w:val="21"/></w:rPr>
   </w:style>
   <w:style w:type="paragraph" w:styleId="MistakeBox">
     <w:name w:val="Mistake Box"/>
     <w:basedOn w:val="Normal"/>
-    <w:pPr><w:spacing w:before="120" w:after="40"/><w:shd w:val="clear" w:color="auto" w:fill="FEF2F2"/><w:pBdr><w:left w:val="single" w:sz="18" w:space="5" w:color="DC2626"/></w:pBdr></w:pPr>
-    <w:rPr><w:b/><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="B91C1C"/><w:sz w:val="21"/></w:rPr>
+    <w:pPr><w:spacing w:before="130" w:after="50"/><w:shd w:val="clear" w:color="auto" w:fill="FFECEC"/><w:pBdr><w:left w:val="single" w:sz="24" w:space="6" w:color="B91C1C"/></w:pBdr></w:pPr>
+    <w:rPr><w:b/><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="991B1B"/><w:sz w:val="22"/></w:rPr>
   </w:style>
   <w:style w:type="paragraph" w:styleId="MistakeBoxText">
     <w:name w:val="Mistake Box Text"/>
     <w:basedOn w:val="Normal"/>
-    <w:pPr><w:spacing w:after="80"/><w:shd w:val="clear" w:color="auto" w:fill="FEF2F2"/><w:ind w:left="260"/></w:pPr>
-    <w:rPr><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="7F1D1D"/><w:sz w:val="20"/></w:rPr>
+    <w:pPr><w:spacing w:after="90"/><w:shd w:val="clear" w:color="auto" w:fill="FFECEC"/><w:ind w:left="260"/></w:pPr>
+    <w:rPr><w:rFonts w:ascii="Aptos" w:eastAsia="Microsoft YaHei" w:hAnsi="Aptos"/><w:color w:val="111827"/><w:sz w:val="21"/></w:rPr>
   </w:style>
 </w:styles>'''
 
@@ -2316,7 +2320,7 @@ def write_markdown(extraction: Dict[str, Any], output: Path) -> None:
 
 def md_value(value: Any) -> str:
     if value is None or value == "":
-        return "待补写"
+        return ""
     if isinstance(value, str):
         return value
     if isinstance(value, list):
@@ -2400,7 +2404,7 @@ def build_notes_markdown(extraction: Dict[str, Any], notes: Dict[int, Dict[str, 
                 "",
                 "### 常见错误",
                 "",
-                markdown_note_field(note, "无或待补写。", "common_mistakes"),
+                markdown_note_field(note, "无。", "common_mistakes"),
                 "",
             ]
             continue
@@ -2442,12 +2446,12 @@ def build_notes_markdown(extraction: Dict[str, Any], notes: Dict[int, Dict[str, 
             else:
                 lines.append(md_value(formulas))
         else:
-            lines.append("无或待补写。")
+            lines.append("无。")
         lines += [
             "",
             "### 补充例题/案例",
             "",
-            markdown_note_field(note, "无或待补写。", "worked_examples", "examples"),
+            markdown_note_field(note, "无。", "worked_examples", "examples"),
             "",
             "### 期末考点定位",
             "",
@@ -2459,7 +2463,7 @@ def build_notes_markdown(extraction: Dict[str, Any], notes: Dict[int, Dict[str, 
             "",
             "### 记忆钩子",
             "",
-            markdown_note_field(note, "无或待补写。", "memory_hooks"),
+            markdown_note_field(note, "无。", "memory_hooks"),
             "",
             "### 可能考法/自测题",
             "",
@@ -2519,10 +2523,13 @@ def write_prompt_pack(extraction: Dict[str, Any], output: Path, language: str) -
         "- Add final-exam fields: exam_focus, key_takeaways, memory_hooks, likely_questions, common_mistakes, prerequisites, difficulty, estimated_review_minutes, and tags.",
         "- likely_questions should include active-recall questions and at least one exam-style question for important formulas or algorithms.",
         "- Add `practice_questions` when possible: short original or open-source-adapted exercises with answer, solution steps, difficulty, and source/source_url if externally inspired.",
+        "- Do not output placeholder answers such as 'answer should include...' or 'review the notes'. If you cannot write a real answer, omit the practice item and mark the slide uncertainty.",
+        "- Every generated practice question must have a directly usable answer and a solution path that names the concrete slide terms, not just generic study advice.",
         "- If OCR/math-recognition data is merged, treat it as a signal but mark uncertain formulas as `需核对`.",
         "- For external practice-bank questions, preserve source/source_url and adapt the wording to the current slide rather than copying long passages.",
         "- Avoid generic filler. Do not write vague lines such as 'put this slide back into the chapter logic' unless you name the exact concept, formula, or algorithm.",
         "- detailed_explanation must include a reasoning chain: definition -> condition -> why it works -> how to use it -> where students make mistakes.",
+        "- The notes should be readable in Word: prefer short titled blocks, dark text, and compact paragraphs. Do not generate long undifferentiated paragraphs.",
         "- For each important formula, explain units/base/log convention and give a concrete numeric mini-example.",
         "- Mark uncertain visual or formula recognition as `需核对`.",
         f"- Output language: {language}.",
@@ -3272,15 +3279,20 @@ def build_slide_practice_questions(
         if len(items) >= max_items:
             return items[:max_items]
 
-    fallback_question = f"第 {number} 页 `{title}` 的核心考点是什么？请写出一个容易错的地方。"
+    fallback_answer = plain(note_field(note, "key_takeaways")) or plain(note_field(note, "exam_focus")) or plain(note_field(note, "what_it_says", "summary"))
+    if not fallback_answer:
+        return items[:max_items]
+
+    topic_hint = "、".join(terms[:3]) if terms else title
+    fallback_question = f"围绕 `{title}`，说明 {topic_hint} 的核心结论，并写出一个容易错的条件。"
     items.append(
         {
             "slide": number,
             "title": title,
             "difficulty": slide_difficulty_label(note, slide),
             "question": fallback_question,
-            "answer": plain(note_field(note, "key_takeaways")) or plain(note_field(note, "exam_focus")) or "写出本页核心结论。",
-            "solution": "先用一句话说出本页解决的问题，再列出关键词、条件和常见错误。",
+            "answer": fallback_answer,
+            "solution": "先用本页标题锁定知识点，再从讲义中的核心结论、适用条件和常见错误各取一句组织答案。",
             "source": "PPT 内容原创生成",
             "source_url": "",
         }
@@ -3664,15 +3676,17 @@ def write_study_html(extraction: Dict[str, Any], notes: Dict[int, Dict[str, Any]
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>PPT 学习页面</title>
   <style>
-    body {{ margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #172033; background: #f6f7fb; }}
-    header {{ padding: 24px 32px; background: #172033; color: white; }}
+    body {{ margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #111827; background: #f3f6fa; }}
+    header {{ padding: 24px 32px; background: #111827; color: white; }}
     main {{ display: grid; grid-template-columns: 260px 1fr; gap: 24px; padding: 24px; }}
-    nav {{ position: sticky; top: 16px; align-self: start; background: white; border: 1px solid #dde3ee; padding: 16px; }}
-    nav a {{ display: block; color: #1d4ed8; text-decoration: none; margin: 8px 0; }}
-    .panel, .slide-card, details {{ background: white; border: 1px solid #dde3ee; padding: 18px; margin-bottom: 16px; }}
+    nav {{ position: sticky; top: 16px; align-self: start; background: white; border: 1px solid #cbd5e1; padding: 16px; box-shadow: 0 1px 2px rgba(15,23,42,.08); }}
+    nav a {{ display: block; color: #1e40af; text-decoration: none; margin: 8px 0; font-weight: 600; }}
+    .panel, .slide-card, details {{ background: white; border: 1px solid #cbd5e1; padding: 18px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(15,23,42,.06); }}
     h1, h2, h3 {{ margin-top: 0; }}
-    img {{ max-width: 100%; border: 1px solid #e5e7eb; }}
-    .formula {{ font-family: "Cambria Math", "Times New Roman", serif; background: #ecfdf5; color: #064e3b; padding: 10px; text-align: center; font-size: 1.15rem; margin: 8px 0; }}
+    h2 {{ color: #172554; }}
+    h3 {{ color: #115e59; }}
+    img {{ max-width: 100%; border: 1px solid #cbd5e1; }}
+    .formula {{ font-family: "Cambria Math", "Times New Roman", serif; background: #eaf7f1; color: #064e3b; padding: 10px; text-align: center; font-size: 1.18rem; margin: 8px 0; }}
     @media (max-width: 800px) {{ main {{ grid-template-columns: 1fr; }} nav {{ position: static; }} }}
   </style>
 </head>
