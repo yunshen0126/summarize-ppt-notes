@@ -13,6 +13,8 @@ By default, compact low-value navigation slides instead of expanding them into f
 
 The Word document must be visually readable before it is considered done. Use high-contrast body text, dark callout text, compact paragraphs, and clear section blocks. If a generated Word file looks pale, gray, or hard to scan, treat that as a failed run and regenerate after fixing style or using the HTML/Markdown artifact as the review source.
 
+Student-facing slide notes must follow a normal teacher flow: first show the PPT page screenshot and a compact original-text check, then explain the slide, then tell the student what to remember, how it may be tested, examples, and common mistakes. Do not put meta-analysis, exam blocks, or long commentary before the slide screenshot.
+
 Also by default, use `--review-depth compressed`. This creates three reading tiers:
 
 - `必读深讲`: pages that deserve real explanation because they contain formulas, core definitions, examples, diagrams, or exam-heavy content.
@@ -64,6 +66,7 @@ For each note-required study slide, cover the following. Do not write full notes
 
 - **页面截图**: include the rendered full-slide image when available.
 - **原始内容**: preserve visible text, bullet points, tables, notes, formula candidates, and extracted images.
+- **输出顺序**: in Word/HTML/Markdown, the slide screenshot must appear before explanation blocks. The preferred order is `PPT 原页 -> PPT 原文核对 -> 老师讲解 -> 必须掌握 -> 考点/例题/易错点`.
 - **这一页是干什么用的**: explain the slide's teaching/presentation function, such as introducing a definition, proving a result, comparing methods, showing an example, or summarizing conclusions.
 - **这一页讲了什么**: restate the content in clear Chinese without losing technical terms.
 - **复杂内容详解**: expand dense logic step by step only for `必读深讲` slides. For `快速扫读` slides, compress to the minimum explanation needed to avoid misunderstanding.
@@ -114,6 +117,7 @@ Default outputs should be short enough that a student wants to read them.
 - Use high-contrast Word output: dark body text, dark callout text, readable metadata, and pale backgrounds only as accents.
 - Avoid tiny gray text for anything the student must read. Metadata and source text can be smaller, but still must be legible.
 - The Word document should scan like a teacher handout: title, exam focus, must-know, explanation, example, mistakes, and original evidence are visually distinct.
+- Each slide page must start from the PPT screenshot. Explanation and exam notes belong below it, not above it.
 - If the Word conversion route makes the result visually weak, prefer the generated HTML/Markdown as the source of truth and regenerate DOCX through the skill script after style fixes.
 
 ## Formula Handling

@@ -38,7 +38,7 @@ WORD_NS = {
     "m": NS_M,
 }
 
-VERSION = "0.11.1"
+VERSION = "0.11.2"
 
 BANNED_FLUFF_PATTERNS = [
     r"放回.*主线.*理解",
@@ -2171,6 +2171,16 @@ def add_question_notes(doc: DocxBuilder, questions: Any) -> None:
         doc.add_bullet(format_question_item(item), style="ExamBoxText")
 
 
+def add_slide_front_matter(doc: DocxBuilder, slide: Dict[str, Any], source_limit: int = 6) -> None:
+    doc.add_heading("先看 PPT 原页", 2)
+    screenshot = slide.get("screenshot", "")
+    if not doc.add_image(screenshot, max_width_inches=6.7):
+        doc.add_paragraph("未生成页面截图。")
+    doc.add_section_label("PPT 原文核对")
+    for item in compact_source_items(slide.get("text") or [], limit=source_limit):
+        doc.add_paragraph(item, style="SourceText")
+
+
 def build_docx(extraction: Dict[str, Any], notes: Dict[int, Dict[str, Any]], output: Path, layout: str = "study") -> None:
     title = f"PPT学习笔记 - {Path(extraction.get('source', 'slides')).stem}"
     doc = DocxBuilder(title)
@@ -2182,15 +2192,6 @@ def build_docx(extraction: Dict[str, Any], notes: Dict[int, Dict[str, Any]], out
     doc.add_meta(f"排版模式：{'复习讲义' if layout == 'study' else '审计全量'}")
     if skipped_navigation_slides(extraction) and layout == "study":
         doc.add_meta("标题页、目录页和章节过渡页已默认压缩；需要全量讲义时使用 --content-filter all。")
-    doc.add_callout(
-        "使用方式",
-        [
-            "先读 `START_HERE` 和学习路径，明确哪些页必读、哪些页只扫一眼。",
-            "必读深讲页看“考点定位-核心结论-深度讲解”；快速扫读页只抓新增结论和考试信号。",
-            "遇到公式页，按“公式-变量-条件-例题”四步复述；最后用主动回忆题闭卷检查。",
-        ],
-        style="InsightBox",
-    )
 
     warnings = extraction.get("warnings") or []
     if warnings:
@@ -2210,8 +2211,10 @@ def build_docx(extraction: Dict[str, Any], notes: Dict[int, Dict[str, Any]], out
             doc.add_meta(f"阅读层级：{REVIEW_TIER_LABELS.get(tier, tier)}；原因：{reasons}")
             if slide.get("duplicate_of"):
                 doc.add_meta(f"重复压缩：本页与第 {slide.get('duplicate_of')} 页相似，避免重复展开。")
+        add_slide_front_matter(doc, slide, source_limit=4 if tier == "quick" else 6)
 
         if layout != "audit" and tier == "quick":
+            doc.add_heading("老师讲解", 2)
             doc.add_callout("速读结论", note_field(note, "key_takeaways") or note_field(note, "what_it_says", "summary"), style="InsightBox", placeholder="待补写：用 2-4 条写出本页新增结论。")
             doc.add_callout("考试信号", note_field(note, "exam_focus"), style="ExamBox", placeholder="待补写：说明本页是否常考、怎么考；不常考就写“了解即可”。")
             add_note_text(doc, "一句话解释", clamp_text(note_field(note, "detailed_explanation", "complex_explanation") or note_field(note, "what_it_says", "summary"), 260), "待补写：只解释核心概念，不要展开成长文。")
@@ -2219,25 +2222,19 @@ def build_docx(extraction: Dict[str, Any], notes: Dict[int, Dict[str, Any]], out
                 add_formula_notes(doc, note_field(note, "formula_explanations", "formulas"))
             if slide_has_visual(slide):
                 add_note_text(doc, "图表/图片只看什么", clamp_text(note_field(note, "visual_explanation", "image_explanation"), 220), "待补写：指出图表结论或需要核对的部分。")
-            doc.add_section_label("原文核对")
-            for item in compact_source_items(slide.get("text") or [], limit=4):
-                doc.add_paragraph(item, style="SourceText")
             continue
 
-        doc.add_callout("考点定位", note_field(note, "exam_focus"), style="ExamBox", placeholder="待补写：说明本页在期末考试中怎么考。")
-        doc.add_callout("必须掌握", note_field(note, "key_takeaways"), style="InsightBox", placeholder="待补写：列出本页真正需要记住的 2-4 个点。")
+        doc.add_heading("老师讲解", 2)
+        add_note_text(doc, "这一页是干什么用的", note_field(note, "purpose", "page_purpose"), "待补写：说明本页在整套 PPT 中的作用。")
         add_note_text(doc, "这一页讲什么", note_field(note, "what_it_says", "summary"), "待补写：用本页具体术语解释内容，不能泛泛而谈。")
         add_note_text(doc, "深度讲解", note_field(note, "detailed_explanation", "complex_explanation"), "待补写：写清推理链、算法步骤、公式来源或图表含义。")
+        doc.add_callout("必须掌握", note_field(note, "key_takeaways"), style="InsightBox", placeholder="待补写：列出本页真正需要记住的 2-4 个点。")
+        doc.add_callout("考点定位", note_field(note, "exam_focus"), style="ExamBox", placeholder="待补写：说明本页在期末考试中怎么考。")
         add_formula_notes(doc, note_field(note, "formula_explanations", "formulas"))
         doc.add_callout("例题/套用", note_field(note, "worked_examples", "examples"), style="FormulaBox", placeholder="待补写：至少给一个能算、能判断或能复述的例子。")
         add_question_notes(doc, note_field(note, "likely_questions"))
         doc.add_callout("常见错误", note_field(note, "common_mistakes"), style="MistakeBox", placeholder="待补写：列出容易混淆、漏条件、算错的地方。")
         doc.add_callout("记忆钩子", note_field(note, "memory_hooks"), style="InsightBox", placeholder="无。")
-
-        screenshot = slide.get("screenshot", "")
-        doc.add_heading("页面截图与核对", 2)
-        if not doc.add_image(screenshot, max_width_inches=6.7):
-            doc.add_paragraph("未生成页面截图。")
 
         formulas = slide.get("formulas") or []
         candidates = slide.get("formula_candidates") or []
@@ -2273,11 +2270,6 @@ def build_docx(extraction: Dict[str, Any], notes: Dict[int, Dict[str, Any]], out
                     doc.add_paragraph(path)
                 elif not path:
                     doc.add_paragraph(json.dumps(image, ensure_ascii=False))
-        else:
-            doc.add_section_label("原文核对")
-            for item in compact_source_items(slide.get("text") or [], limit=6):
-                doc.add_paragraph(item, style="SourceText")
-
         add_note_text(doc, "不确定内容", note_field(note, "uncertainties"), "无。")
 
     doc.write(output)
